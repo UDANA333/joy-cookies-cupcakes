@@ -1,70 +1,44 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import FloatingShapes from "@/components/FloatingShapes";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
+import { products } from "@/data/products";
 import heroImage from "@/assets/hero-banner.jpg";
-import cookieImage from "@/assets/cookie-hero.jpg";
-import cupcakeImage from "@/assets/cupcake-hero.jpg";
-import cakepopImage from "@/assets/cakepop-hero.jpg";
 
-type Category = "all" | "cookies" | "cupcakes" | "cakepops" | "seasonal";
-
-const products = [
-  // Cookies
-  { id: "1", name: "Classic Chocolate Chip", price: 3.5, image: cookieImage, category: "cookies" },
-  { id: "2", name: "Double Fudge Brownie", price: 4.0, image: cookieImage, category: "cookies" },
-  { id: "3", name: "Snickerdoodle Delight", price: 3.5, image: cookieImage, category: "cookies" },
-  { id: "4", name: "Oatmeal Raisin Love", price: 3.5, image: cookieImage, category: "cookies" },
-  // Cupcakes
-  { id: "5", name: "Vanilla Dream", price: 4.5, image: cupcakeImage, category: "cupcakes" },
-  { id: "6", name: "Red Velvet Bliss", price: 5.0, image: cupcakeImage, category: "cupcakes" },
-  { id: "7", name: "Strawberry Swirl", price: 4.75, image: cupcakeImage, category: "cupcakes" },
-  { id: "8", name: "Chocolate Ganache", price: 5.0, image: cupcakeImage, category: "cupcakes" },
-  // Cake Pops
-  { id: "9", name: "Birthday Sprinkles", price: 3.0, image: cakepopImage, category: "cakepops" },
-  { id: "10", name: "Pink Velvet Pop", price: 3.25, image: cakepopImage, category: "cakepops" },
-  { id: "11", name: "Cookies & Cream", price: 3.25, image: cakepopImage, category: "cakepops" },
-  // Seasonal
-  { id: "12", name: "Pumpkin Spice Cookie", price: 4.0, image: cookieImage, category: "seasonal" },
-  { id: "13", name: "Maple Pecan Cupcake", price: 5.5, image: cupcakeImage, category: "seasonal" },
-];
+type Category = "all" | "cookies" | "cupcakes" | "cakepops";
 
 const categories: { id: Category; label: string }[] = [
   { id: "all", label: "All Treats" },
   { id: "cookies", label: "Cookies" },
   { id: "cupcakes", label: "Cupcakes" },
   { id: "cakepops", label: "Cake Pops" },
-  { id: "seasonal", label: "Seasonal ✨" },
 ];
 
 const Index = () => {
   const [activeCategory, setActiveCategory] = useState<Category>("all");
-  const { addItem, totalItems } = useCart();
+  const { addItem, totalItems, showNotification } = useCart();
 
   const filteredProducts = activeCategory === "all" 
     ? products 
     : products.filter(p => p.category === activeCategory);
 
-  const handleAddToCart = (id: string, quantity: number, isVegan: boolean) => {
+  const handleAddToCart = (id: string) => {
     const product = products.find(p => p.id === id);
     if (product) {
       addItem({
-        id: `${id}-${isVegan ? 'veg' : 'reg'}`,
+        id: product.id,
         name: product.name,
         price: product.price,
         image: product.image,
         category: product.category,
-        isVegan,
-        quantity,
+        isVegan: false,
+        quantity: 1,
       });
-      toast.success(`Added ${quantity} ${product.name} to your order!`, {
-        description: isVegan ? "Vegan option selected" : "Regular option",
-      });
+      showNotification(`Added ${product.name} to your order!`);
     }
   };
 
@@ -72,37 +46,39 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Navbar cartCount={totalItems} />
       
-      {/* Hero Section */}
-      <section className="relative min-h-[70vh] flex items-center justify-center overflow-hidden pt-20">
+      {/* Hero Section - Optimized for all devices */}
+      <section className="relative min-h-[100svh] flex items-center justify-center overflow-hidden pt-16 md:pt-20">
         <FloatingShapes variant="hero" />
         
-        {/* Hero Background Image */}
+        {/* Hero Background Image - Lazy loaded */}
         <motion.div 
           className="absolute inset-0 z-0"
-          initial={{ scale: 1.1, opacity: 0 }}
+          initial={{ scale: 1.05, opacity: 0 }}
           animate={{ scale: 1, opacity: 0.2 }}
-          transition={{ duration: 1.2, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
         >
           <img 
             src={heroImage} 
             alt="Bakery treats" 
             className="w-full h-full object-cover"
+            loading="eager"
+            decoding="async"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background" />
         </motion.div>
 
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div
-            className="max-w-2xl mx-auto text-center space-y-6"
-            initial={{ opacity: 0, y: 40 }}
+            className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6"
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
           >
             <motion.h1 
-              className="font-display text-5xl md:text-7xl font-bold text-foreground leading-tight"
-              initial={{ opacity: 0, y: 30 }}
+              className="font-display text-4xl sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-bold text-foreground leading-[1.1]"
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
             >
               Homemade goodness
               <br />
@@ -110,55 +86,44 @@ const Index = () => {
             </motion.h1>
             
             <motion.p
-              className="text-lg md:text-xl text-muted-foreground max-w-lg mx-auto"
-              initial={{ opacity: 0, y: 20 }}
+              className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-md sm:max-w-lg mx-auto px-4 sm:px-0"
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.5 }}
+              transition={{ duration: 0.6, delay: 0.35 }}
             >
               Fresh-baked cookies, cupcakes & cake pops made with love. 
               Pre-order for easy pickup!
             </motion.p>
 
             <motion.div
-              className="flex flex-col sm:flex-row gap-4 justify-center pt-4"
-              initial={{ opacity: 0, y: 20 }}
+              className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center pt-2 sm:pt-4 px-4 sm:px-0"
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.7 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
             >
-              <Button variant="hero" size="xl" onClick={() => {
-                document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
-              }}>
+              <Button 
+                variant="hero" 
+                size="xl" 
+                className="w-full sm:w-auto touch-manipulation"
+                onClick={() => {
+                  document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
                 Start Ordering
               </Button>
-              <Button variant="outline" size="xl" asChild>
+              <Button variant="outline" size="xl" className="w-full sm:w-auto touch-manipulation" asChild>
                 <a href="/about">Our Story</a>
               </Button>
             </motion.div>
           </motion.div>
         </div>
-
-        {/* Scroll Indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 1 }}
-        >
-          <motion.div
-            className="w-6 h-10 rounded-full border-2 border-primary/30 flex justify-center pt-2"
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <div className="w-1.5 h-3 bg-primary/50 rounded-full" />
-          </motion.div>
-        </motion.div>
       </section>
 
       {/* Menu Section */}
-      <section id="menu" className="relative py-20">
+      <section id="menu" className="relative py-12 sm:py-16 md:py-20">
         <FloatingShapes variant="section" />
         
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           {/* Section Header */}
           <motion.div
             className="text-center mb-12"
@@ -203,40 +168,130 @@ const Index = () => {
             ))}
           </motion.div>
 
-          {/* Seasonal Notice */}
-          {activeCategory === "seasonal" && (
+          {/* Product Grid - Show by category sections when "All Treats" is selected */}
+          {activeCategory === "all" ? (
+            <div className="space-y-16">
+              {/* Cookies Section */}
+              <div>
+                <motion.h3
+                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  Cookies
+                </motion.h3>
+                <motion.div
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  layout
+                >
+                  {products.filter(p => p.category === "cookies").map((product, index) => (
+                    <motion.div
+                      key={product.id}
+                      layout
+                      initial={{ opacity: 0, y: 30 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: index * 0.05, duration: 0.4 }}
+                    >
+                      <ProductCard
+                        {...product}
+                        onAddToCart={handleAddToCart}
+                      />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+
+              {/* Cupcakes Section */}
+              <div>
+                <motion.h3
+                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  Cupcakes
+                </motion.h3>
+                <motion.div
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  layout
+                >
+                  {products.filter(p => p.category === "cupcakes").map((product, index) => (
+                    <motion.div
+                      key={product.id}
+                      layout
+                      initial={{ opacity: 0, y: 30 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: index * 0.05, duration: 0.4 }}
+                    >
+                      <ProductCard
+                        {...product}
+                        onAddToCart={handleAddToCart}
+                      />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+
+              {/* Cake Pops Section */}
+              <div>
+                <motion.h3
+                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  Cake Pops
+                </motion.h3>
+                <motion.div
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  layout
+                >
+                  {products.filter(p => p.category === "cakepops").map((product, index) => (
+                    <motion.div
+                      key={product.id}
+                      layout
+                      initial={{ opacity: 0, y: 30 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: index * 0.05, duration: 0.4 }}
+                    >
+                      <ProductCard
+                        {...product}
+                        onAddToCart={handleAddToCart}
+                      />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            </div>
+          ) : (
             <motion.div
-              className="text-center mb-8 p-4 bg-coral-light/30 rounded-2xl border border-coral/20"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              layout
             >
-              <p className="text-chocolate-light text-sm font-medium">
-                ✨ Seasonal flavors • Prices may vary based on availability
-              </p>
+              {filteredProducts.map((product, index) => (
+                <motion.div
+                  key={product.id}
+                  layout
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: index * 0.05, duration: 0.4 }}
+                >
+                  <ProductCard
+                    {...product}
+                    onAddToCart={handleAddToCart}
+                  />
+                </motion.div>
+              ))}
             </motion.div>
           )}
-
-          {/* Product Grid */}
-          <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-            layout
-          >
-            {filteredProducts.map((product, index) => (
-              <motion.div
-                key={product.id}
-                layout
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ delay: index * 0.05, duration: 0.4 }}
-              >
-                <ProductCard
-                  {...product}
-                  onAddToCart={handleAddToCart}
-                />
-              </motion.div>
-            ))}
-          </motion.div>
         </div>
       </section>
 

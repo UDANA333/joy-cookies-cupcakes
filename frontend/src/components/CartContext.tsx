@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback } from "react";
 
 export interface CartItem {
   id: string;
@@ -10,6 +10,12 @@ export interface CartItem {
   category: string;
 }
 
+export interface CartNotification {
+  message: string;
+  description?: string;
+  visible: boolean;
+}
+
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
@@ -18,12 +24,32 @@ interface CartContextType {
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
+  notification: CartNotification;
+  showNotification: (message: string, description?: string) => void;
+  hideNotification: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [notification, setNotification] = useState<CartNotification>({
+    message: "",
+    description: "",
+    visible: false,
+  });
+
+  const showNotification = useCallback((message: string, description?: string) => {
+    setNotification({ message, description, visible: true });
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      setNotification((prev) => ({ ...prev, visible: false }));
+    }, 3000);
+  }, []);
+
+  const hideNotification = useCallback(() => {
+    setNotification((prev) => ({ ...prev, visible: false }));
+  }, []);
 
   const addItem = (newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
     setItems((prev) => {
@@ -70,6 +96,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         clearCart,
         totalItems,
         totalPrice,
+        notification,
+        showNotification,
+        hideNotification,
       }}
     >
       {children}

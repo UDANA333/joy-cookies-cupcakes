@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Minus, Plus, Leaf } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { ShoppingBag } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface ProductCardProps {
   id: string;
@@ -10,162 +9,103 @@ interface ProductCardProps {
   price: number;
   image: string;
   category: string;
-  onAddToCart?: (id: string, quantity: number, isVegan: boolean) => void;
+  onAddToCart?: (id: string) => void;
 }
 
-const ProductCard = ({ id, name, price, image, category, onAddToCart }: ProductCardProps) => {
-  const [quantity, setQuantity] = useState(1);
-  const [isVegan, setIsVegan] = useState(false);
+const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: ProductCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const navigate = useNavigate();
 
-  const handleAdd = () => {
-    onAddToCart?.(id, quantity, isVegan);
-  };
+  const handleAddToCart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onAddToCart?.(id);
+  }, [id, onAddToCart]);
+
+  const handleCardClick = useCallback(() => {
+    navigate(`/product/${id}`);
+  }, [navigate, id]);
 
   return (
     <motion.div
-      className="relative bg-card rounded-3xl overflow-hidden shadow-soft"
-      style={{ transformStyle: "preserve-3d", perspective: "1000px" }}
+      className="relative bg-card rounded-3xl overflow-hidden shadow-soft cursor-pointer touch-manipulation"
+      style={{ 
+        transformStyle: "preserve-3d", 
+        perspective: "1000px",
+        willChange: "transform",
+      }}
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
       whileHover={{
-        y: -12,
-        rotateX: 2,
-        rotateY: -2,
+        y: -8,
         boxShadow: "var(--shadow-lifted)",
+        transition: { duration: 0.2, ease: "easeOut" }
       }}
       whileTap={{
-        y: -4,
         scale: 0.98,
         boxShadow: "var(--shadow-pressed)",
+        transition: { duration: 0.1 }
       }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
+      onClick={handleCardClick}
     >
       {/* Image Container */}
-      <motion.div 
-        className="relative h-48 overflow-hidden bg-secondary/30"
-        style={{ transformStyle: "preserve-3d" }}
-      >
+      <div className="relative h-48 sm:h-52 md:h-56 overflow-hidden bg-white flex items-center justify-center p-3 sm:p-4">
+        {/* Loading placeholder */}
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-secondary animate-pulse" />
+        )}
         <motion.img
           src={image}
           alt={name}
-          className="w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
+          className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImageLoaded(true)}
           animate={{
-            scale: isHovered ? 1.08 : 1,
-            z: isHovered ? 20 : 0,
-          }}
-          transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-        />
-        {/* Floating badge */}
-        <motion.div
-          className="absolute top-3 right-3 bg-card/90 backdrop-blur-sm text-xs font-semibold px-3 py-1.5 rounded-full shadow-soft text-chocolate-light"
-          animate={{
-            y: isHovered ? -3 : 0,
             scale: isHovered ? 1.05 : 1,
           }}
-          transition={{ duration: 0.3 }}
-        >
-          {category}
-        </motion.div>
-      </motion.div>
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        />
 
-      {/* Content */}
-      <div className="p-5 space-y-4">
-        <div className="flex justify-between items-start">
-          <h3 className="font-display text-xl font-semibold text-foreground leading-tight">
+        {/* Cart icon - appears on hover/touch */}
+        <motion.button
+          className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-primary text-primary-foreground p-2 sm:p-2.5 rounded-full shadow-medium touch-manipulation"
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{
+            opacity: isHovered ? 1 : 0,
+            scale: isHovered ? 1 : 0.5,
+          }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ duration: 0.15 }}
+          onClick={handleAddToCart}
+          onTouchEnd={handleAddToCart}
+          aria-label={`Add ${name} to cart`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+        </motion.button>
+      </div>
+
+      {/* Content - Just name and price */}
+      <div className="p-3 sm:p-4">
+        <div className="flex justify-between items-center gap-2">
+          <h3 className="font-display text-base sm:text-lg font-semibold text-foreground leading-tight line-clamp-1">
             {name}
           </h3>
-          <span className="text-lg font-bold text-primary font-body">
+          <span className="text-base sm:text-lg font-bold text-primary font-body whitespace-nowrap">
             ${price.toFixed(2)}
           </span>
         </div>
-
-        {/* Vegan Toggle */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground font-body">
-            Preference
-          </span>
-          <motion.button
-            className={cn(
-              "relative flex items-center w-24 h-9 rounded-full p-1 transition-colors duration-300",
-              isVegan ? "bg-mint" : "bg-secondary"
-            )}
-            onClick={() => setIsVegan(!isVegan)}
-            whileTap={{ scale: 0.95 }}
-          >
-            {/* Sliding knob */}
-            <motion.div
-              className="absolute flex items-center justify-center w-10 h-7 bg-card rounded-full shadow-medium"
-              animate={{ x: isVegan ? 52 : 4 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-            >
-              {isVegan && <Leaf className="w-4 h-4 text-mint" />}
-            </motion.div>
-            <span className={cn(
-              "flex-1 text-xs font-semibold text-center transition-opacity",
-              !isVegan ? "opacity-100 text-chocolate-light" : "opacity-50"
-            )}>
-              Reg
-            </span>
-            <span className={cn(
-              "flex-1 text-xs font-semibold text-center transition-opacity",
-              isVegan ? "opacity-100 text-chocolate-light" : "opacity-50"
-            )}>
-              Veg
-            </span>
-          </motion.button>
-        </div>
-
-        {/* Quantity & Add */}
-        <div className="flex items-center gap-3">
-          {/* Quantity Selector */}
-          <div className="flex items-center bg-secondary rounded-xl overflow-hidden">
-            <motion.button
-              className="p-2.5 text-chocolate-light hover:text-chocolate transition-colors"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              whileTap={{ scale: 0.85 }}
-            >
-              <Minus className="w-4 h-4" />
-            </motion.button>
-            <span className="w-8 text-center font-semibold text-foreground">
-              {quantity}
-            </span>
-            <motion.button
-              className="p-2.5 text-chocolate-light hover:text-chocolate transition-colors"
-              onClick={() => setQuantity(quantity + 1)}
-              whileTap={{ scale: 0.85 }}
-            >
-              <Plus className="w-4 h-4" />
-            </motion.button>
-          </div>
-
-          {/* Add Button */}
-          <Button
-            variant="hero"
-            className="flex-1"
-            onClick={handleAdd}
-          >
-            Add to Order
-          </Button>
-        </div>
-
-        {/* Vegan notice */}
-        {isVegan && (
-          <motion.p
-            className="text-xs text-muted-foreground italic"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-          >
-            Vegan availability may vary
-          </motion.p>
-        )}
       </div>
     </motion.div>
   );
-};
+});
+
+ProductCard.displayName = 'ProductCard';
 
 export default ProductCard;

@@ -1,0 +1,258 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Joy Cookies & Cupcakes Design System
+   Warm, feminine, homemade, premium but friendly
+   All colors in HSL
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    /* Warm Bakery Palette */
+    --background: 35 45% 97%;
+    --foreground: 25 35% 20%;
+
+    --card: 35 50% 99%;
+    --card-foreground: 25 35% 20%;
+
+    --popover: 35 50% 99%;
+    --popover-foreground: 25 35% 20%;
+
+    /* Soft Rose Pink - Primary */
+    --primary: 350 65% 72%;
+    --primary-foreground: 35 45% 99%;
+
+    /* Warm Cream - Secondary */
+    --secondary: 35 55% 92%;
+    --secondary-foreground: 25 35% 25%;
+
+    /* Muted Blush */
+    --muted: 35 30% 90%;
+    --muted-foreground: 25 20% 50%;
+
+    /* Peachy Coral - Accent */
+    --accent: 20 80% 75%;
+    --accent-foreground: 25 40% 18%;
+
+    /* Chocolate Brown - Destructive equivalent */
+    --destructive: 20 45% 35%;
+    --destructive-foreground: 35 45% 97%;
+
+    --border: 35 30% 85%;
+    --input: 35 30% 88%;
+    --ring: 350 65% 72%;
+
+    --radius: 1rem;
+
+    /* Custom Bakery Colors */
+    --cream: 40 50% 95%;
+    --vanilla: 45 55% 92%;
+    --rose: 350 65% 72%;
+    --rose-light: 350 70% 85%;
+    --rose-deep: 350 55% 60%;
+    --coral: 20 80% 75%;
+    --coral-light: 20 85% 88%;
+    --chocolate: 20 45% 25%;
+    --chocolate-light: 25 35% 40%;
+    --caramel: 35 70% 55%;
+    --mint: 155 35% 75%;
+    --mint-light: 155 40% 88%;
+    
+    /* Gradients */
+    --gradient-cream: linear-gradient(135deg, hsl(40 50% 95%), hsl(35 55% 92%));
+    --gradient-rose: linear-gradient(135deg, hsl(350 70% 85%), hsl(350 65% 72%));
+    --gradient-warm: linear-gradient(180deg, hsl(35 45% 97%), hsl(35 40% 92%));
+    --gradient-card: linear-gradient(145deg, hsl(35 50% 99%), hsl(35 45% 96%));
+    --gradient-hero: linear-gradient(180deg, hsl(35 50% 98%) 0%, hsl(35 55% 94%) 50%, hsl(35 40% 90%) 100%);
+    
+    /* Shadows - Warm tinted */
+    --shadow-soft: 0 4px 20px -4px hsl(25 30% 30% / 0.08);
+    --shadow-medium: 0 8px 30px -6px hsl(25 30% 30% / 0.12);
+    --shadow-lifted: 0 20px 50px -12px hsl(25 30% 30% / 0.18);
+    --shadow-pressed: 0 2px 8px -2px hsl(25 30% 30% / 0.1);
+    --shadow-glow: 0 0 40px -10px hsl(350 65% 72% / 0.3);
+    
+    /* 3D Depth Variables */
+    --perspective: 1200px;
+    --depth-1: translateZ(10px);
+    --depth-2: translateZ(20px);
+    --depth-3: translateZ(40px);
+
+    /* Sidebar */
+    --sidebar-background: 35 50% 98%;
+    --sidebar-foreground: 25 35% 25%;
+    --sidebar-primary: 350 65% 72%;
+    --sidebar-primary-foreground: 35 45% 99%;
+    --sidebar-accent: 35 55% 92%;
+    --sidebar-accent-foreground: 25 35% 25%;
+    --sidebar-border: 35 30% 88%;
+    --sidebar-ring: 350 65% 72%;
+  }
+
+  .dark {
+    --background: 25 30% 12%;
+    --foreground: 35 45% 95%;
+
+    --card: 25 28% 16%;
+    --card-foreground: 35 45% 95%;
+
+    --popover: 25 28% 16%;
+    --popover-foreground: 35 45% 95%;
+
+    --primary: 350 55% 65%;
+    --primary-foreground: 25 30% 12%;
+
+    --secondary: 25 25% 22%;
+    --secondary-foreground: 35 45% 95%;
+
+    --muted: 25 25% 22%;
+    --muted-foreground: 35 25% 60%;
+
+    --accent: 20 70% 60%;
+    --accent-foreground: 35 45% 95%;
+
+    --destructive: 0 50% 45%;
+    --destructive-foreground: 35 45% 95%;
+
+    --border: 25 25% 25%;
+    --input: 25 25% 25%;
+    --ring: 350 55% 65%;
+
+    --sidebar-background: 25 30% 10%;
+    --sidebar-foreground: 35 45% 90%;
+    --sidebar-primary: 350 55% 65%;
+    --sidebar-primary-foreground: 25 30% 10%;
+    --sidebar-accent: 25 25% 20%;
+    --sidebar-accent-foreground: 35 45% 90%;
+    --sidebar-border: 25 25% 22%;
+    --sidebar-ring: 350 55% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Nunito', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer components {
+  /* 3D Card Base */
+  .card-3d {
+    @apply relative;
+    transform-style: preserve-3d;
+    perspective: var(--perspective);
+    transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), 
+                box-shadow 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  
+  .card-3d:hover {
+    transform: translateY(-8px) rotateX(2deg) rotateY(-2deg);
+    box-shadow: var(--shadow-lifted);
+  }
+  
+  .card-3d:active {
+    transform: translateY(-2px) scale(0.98);
+    box-shadow: var(--shadow-pressed);
+  }
+  
+  /* Pressable Button */
+  .btn-pressable {
+    @apply relative;
+    transform-style: preserve-3d;
+    transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  
+  .btn-pressable:hover {
+    transform: translateY(-2px);
+  }
+  
+  .btn-pressable:active {
+    transform: translateY(2px) scale(0.97);
+    box-shadow: var(--shadow-pressed);
+  }
+  
+  /* Floating Effect */
+  .float-element {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  
+  /* Parallax Container */
+  .parallax-container {
+    perspective: 1000px;
+    overflow-x: hidden;
+  }
+  
+  /* Depth Layers */
+  .layer-bg {
+    transform: translateZ(-50px) scale(1.1);
+  }
+  
+  .layer-mid {
+    transform: translateZ(0);
+  }
+  
+  .layer-front {
+    transform: translateZ(50px) scale(0.95);
+  }
+  
+  /* Warm Gradient Text */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(350 65% 65%), hsl(20 70% 60%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Glass Morphism */
+  .glass {
+    background: hsl(35 50% 99% / 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  
+  /* Soft Blob Shapes */
+  .blob {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    animation: morph 8s ease-in-out infinite;
+  }
+  
+  @keyframes morph {
+    0%, 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+    50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+  }
+}
+
+@layer utilities {
+  /* Smooth scrolling */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+  
+  /* No scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

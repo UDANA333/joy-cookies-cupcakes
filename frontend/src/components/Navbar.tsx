@@ -1,7 +1,7 @@
 import { useState, memo, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ShoppingBag, Heart, Check } from "lucide-react";
+import { Menu, X, ShoppingBag, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/components/CartContext";
@@ -42,7 +42,11 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-primary fill-primary" />
+              <img 
+                src="/logo.jpeg" 
+                alt="Joy Cookies & Cupcakes" 
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain rounded-lg"
+              />
               <span className="font-display text-lg sm:text-xl md:text-2xl font-semibold text-foreground">
                 Joy <span className="text-primary">Cookies</span>
               </span>

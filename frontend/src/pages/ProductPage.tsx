@@ -19,6 +19,14 @@ const ProductPage = () => {
   const [showScrollHint, setShowScrollHint] = useState(false);
   const relatedSectionRef = useRef<HTMLElement>(null);
 
+  // Reset quantities when product ID changes
+  useEffect(() => {
+    setRegularQuantity(1);
+    setVeganQuantity(1);
+    setIsVegan(false);
+    setShowScrollHint(false);
+  }, [id]);
+
   // Hide scroll hint when user scrolls to related section
   useEffect(() => {
     const handleScroll = () => {

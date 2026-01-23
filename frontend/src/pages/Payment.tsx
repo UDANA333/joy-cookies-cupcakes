@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CreditCard, ExternalLink } from "lucide-react";
@@ -12,7 +12,14 @@ const Payment = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
   const { totalItems, totalPrice, clearCart } = useCart();
-  const { formData } = (location.state as { formData: { firstName: string; email: string; pickupDate: string; pickupTime: string } }) || { formData: {} };
+  const { formData } = (location.state as { formData: { firstName: string; email: string; pickupDate: string; pickupTime: string } }) || { formData: null };
+
+  // Redirect to checkout if accessed directly without form data
+  useEffect(() => {
+    if (!formData || !formData.email) {
+      navigate('/checkout', { replace: true });
+    }
+  }, [formData, navigate]);
 
   const handlePayment = useCallback((method: "paypal" | "venmo") => {
     // UI only - just navigate to confirmation

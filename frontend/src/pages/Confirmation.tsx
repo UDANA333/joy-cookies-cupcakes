@@ -1,7 +1,7 @@
-import { memo } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { memo, useEffect } from "react";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { CheckCircle2, Calendar, Clock, Mail, Heart } from "lucide-react";
+import { CheckCircle2, Calendar, Clock, Mail, Heart, MapPin } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FloatingShapes from "@/components/FloatingShapes";
@@ -9,15 +9,23 @@ import { Button } from "@/components/ui/button";
 
 const Confirmation = memo(() => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { formData, totalPrice, paymentMethod } = (location.state as { 
     formData: { firstName: string; email: string; pickupDate: string; pickupTime: string }; 
     totalPrice: number;
     paymentMethod: string;
   }) || { 
-    formData: { firstName: "", email: "", pickupDate: "", pickupTime: "" }, 
+    formData: null, 
     totalPrice: 0,
     paymentMethod: "" 
   };
+
+  // Redirect to home if accessed directly without order data
+  useEffect(() => {
+    if (!formData || !formData.email) {
+      navigate('/', { replace: true });
+    }
+  }, [formData, navigate]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
@@ -38,7 +46,7 @@ const Confirmation = memo(() => {
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div
-            className="max-w-sm sm:max-w-md lg:max-w-lg mx-auto text-center"
+            className="max-w-sm sm:max-w-md lg:max-w-4xl mx-auto text-center"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -74,71 +82,116 @@ const Confirmation = memo(() => {
               Thank you{formData.firstName ? `, ${formData.firstName}` : ""}! Your sweet treats are being prepared with love.
             </motion.p>
 
-            {/* Order Details Card */}
-            <motion.div
-              className="bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 shadow-medium text-left space-y-4 sm:space-y-6 mb-6 sm:mb-8"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-            >
-              <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-border">
-                <span className="text-sm sm:text-base text-muted-foreground">Order Total</span>
-                <span className="font-display text-xl sm:text-2xl font-bold text-primary">
-                  ${totalPrice.toFixed(2)}
-                </span>
-              </div>
+            {/* Order Details & Location - Side by side on desktop */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+              {/* Order Details Card - Left */}
+              <motion.div
+                className="bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-medium text-left space-y-4 sm:space-y-5"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.6 }}
+              >
+                <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-border">
+                  <span className="text-sm sm:text-base text-muted-foreground">Order Total</span>
+                  <span className="font-display text-xl sm:text-2xl font-bold text-primary">
+                    ${totalPrice.toFixed(2)}
+                  </span>
+                </div>
 
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Pickup Date</p>
+                      <p className="text-sm sm:text-base font-semibold text-foreground">
+                        {formatDate(formData.pickupDate)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs sm:text-sm text-muted-foreground">Pickup Date</p>
-                    <p className="text-sm sm:text-base font-semibold text-foreground">
-                      {formatDate(formData.pickupDate)}
-                    </p>
+
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Pickup Time</p>
+                      <p className="text-sm sm:text-base font-semibold text-foreground">
+                        {formData.pickupTime}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Confirmation Email</p>
+                      <p className="text-sm sm:text-base font-semibold text-foreground truncate">
+                        {formData.email}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                <div className="bg-rose-light/30 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-rose/20">
+                  <p className="text-xs sm:text-sm text-chocolate-light text-center flex items-center justify-center gap-1.5 sm:gap-2">
+                    <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                    <span>A confirmation and bill will be sent to your email.</span>
+                  </p>
+                </div>
+              </motion.div>
+
+              {/* Pickup Location Card - Right */}
+              <motion.a
+                href="https://maps.app.goo.gl/z3BufPyu399hN2Dw9"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block h-full"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.7 }}
+              >
+                <div className="relative h-full bg-gradient-to-br from-rose-light/40 via-coral-light/30 to-mint-light/40 rounded-2xl sm:rounded-3xl p-5 sm:p-6 border-2 border-primary/30 shadow-medium hover:shadow-lifted hover:border-primary/50 transition-all group overflow-hidden flex flex-col justify-center">
+                  {/* Decorative background elements */}
+                  <div className="absolute top-0 right-0 w-20 h-20 sm:w-24 sm:h-24 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute bottom-0 left-0 w-14 h-14 sm:w-16 sm:h-16 bg-mint/20 rounded-full translate-y-1/2 -translate-x-1/2" />
+                  
+                  <div className="relative flex flex-col items-center text-center gap-3 sm:gap-4">
+                    {/* Map Pin Icon */}
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                      <MapPin className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+                    </div>
+                    
+                    {/* Location Info */}
+                    <div>
+                      <span className="text-[10px] sm:text-xs font-semibold text-primary uppercase tracking-wider">📍 Pickup Location</span>
+                      <h3 className="font-display text-lg sm:text-xl font-bold text-foreground mt-1">
+                        Joy Cookies & Cupcakes
+                      </h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                        Tap to get directions on Google Maps
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs sm:text-sm text-muted-foreground">Pickup Time</p>
-                    <p className="text-sm sm:text-base font-semibold text-foreground">
-                      {formData.pickupTime}
+                  
+                  {/* Bottom notice */}
+                  <div className="relative mt-4 pt-3 sm:pt-4 border-t border-primary/20">
+                    <p className="text-[10px] sm:text-xs text-chocolate-light text-center font-medium leading-relaxed">
+                      🚗 Don't forget to bring your confirmation email!
                     </p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm text-muted-foreground">Confirmation Email</p>
-                    <p className="text-sm sm:text-base font-semibold text-foreground truncate">
-                      {formData.email}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-rose-light/30 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-rose/20">
-                <p className="text-xs sm:text-sm text-chocolate-light text-center flex items-center justify-center gap-1.5 sm:gap-2">
-                  <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                  <span>A confirmation and bill will be sent to your email.</span>
-                </p>
-              </div>
-            </motion.div>
+              </motion.a>
+            </div>
 
             {/* Back to Menu */}
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
+              transition={{ delay: 0.9 }}
             >
               <Button variant="hero" size="xl" asChild className="w-full sm:w-auto touch-manipulation">
                 <Link to="/" className="flex items-center justify-center gap-2">

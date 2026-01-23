@@ -1,24 +1,24 @@
 // Cookie images
-import chocolateChipCookie from "@/assets/cookies/Chocolate Chip.png";
-import sugarCookie from "@/assets/cookies/Sugar Cookie.png";
-import germanChocolateCookie from "@/assets/cookies/German Chocolate Cookie.png";
-import doubleChocolateCookie from "@/assets/cookies/Double Chocolate Cookie.png";
-import biscoffCookie from "@/assets/cookies/Biscoff Cookie.png";
-import oatmealRaisinCookie from "@/assets/cookies/Oatmeal Raisin Cookie.png";
-import whiteChocolateMacadamiaCookie from "@/assets/cookies/White Chocolate Macadamia Cookie.png";
-import peanutButterCookie from "@/assets/cookies/Peanut Butter Cookie.png";
+import chocolateChipCookie from "@/assets/cookies/Chocolate Chip.webp";
+import sugarCookie from "@/assets/cookies/Sugar Cookie.webp";
+import germanChocolateCookie from "@/assets/cookies/German Chocolate Cookie.webp";
+import doubleChocolateCookie from "@/assets/cookies/Double Chocolate Cookie.webp";
+import biscoffCookie from "@/assets/cookies/Biscoff Cookie.webp";
+import oatmealRaisinCookie from "@/assets/cookies/Oatmeal Raisin Cookie.webp";
+import whiteChocolateMacadamiaCookie from "@/assets/cookies/White Chocolate Macadamia Cookie.webp";
+import peanutButterCookie from "@/assets/cookies/Peanut Butter Cookie.webp";
 
 // Cupcake images
-import vanillaCupcake from "@/assets/cupcakes/Vanilla Cupcake.png";
-import chocolateCupcake from "@/assets/cupcakes/Chocolate Cupcake.png";
-import lemonBlueberryCupcake from "@/assets/cupcakes/Lemon Blueberry Cupcake.png";
-import cookiesAndCreamCupcake from "@/assets/cupcakes/Cookies and Cream Cupcake.png";
-import saltedCaramelCupcake from "@/assets/cupcakes/Salted Caramel Cupcake.png";
-import funfettiCupcake from "@/assets/cupcakes/Funfetti Cupcake.png";
+import vanillaCupcake from "@/assets/cupcakes/Vanilla Cupcake.webp";
+import chocolateCupcake from "@/assets/cupcakes/Chocolate Cupcake.webp";
+import lemonBlueberryCupcake from "@/assets/cupcakes/Lemon Blueberry Cupcake.webp";
+import cookiesAndCreamCupcake from "@/assets/cupcakes/Cookies and Cream Cupcake.webp";
+import saltedCaramelCupcake from "@/assets/cupcakes/Salted Caramel Cupcake.webp";
+import funfettiCupcake from "@/assets/cupcakes/Funfetti Cupcake.webp";
 
 // Cake Pop images
-import chocolateCakePop from "@/assets/cakepops/Chocolate Cake Pop.png";
-import vanillaCakePop from "@/assets/cakepops/Vanilla Cake Pop.png";
+import chocolateCakePop from "@/assets/cakepops/Chocolate Cake Pop.webp";
+import vanillaCakePop from "@/assets/cakepops/Vanilla Cake Pop.webp";
 
 export interface Product {
   id: string;

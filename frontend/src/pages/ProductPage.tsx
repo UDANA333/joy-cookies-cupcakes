@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Minus, Plus, Leaf, ArrowLeft, ShoppingBag, Cookie, ChevronUp } from "lucide-react";
+import { Minus, Plus, ArrowLeft, ShoppingBag, Cookie, ChevronUp } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -9,21 +9,17 @@ import { useCart } from "@/components/CartContext";
 import { getProductById, getRelatedProducts, getRandomProducts, Product } from "@/data/products";
 import { cn } from "@/lib/utils";
 
-const ProductPage = () => {
+const ProductPage = memo(() => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addItem, totalItems, showNotification } = useCart();
   const [regularQuantity, setRegularQuantity] = useState(1);
-  const [veganQuantity, setVeganQuantity] = useState(1);
-  const [isVegan, setIsVegan] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(false);
   const relatedSectionRef = useRef<HTMLElement>(null);
 
   // Reset quantities when product ID changes
   useEffect(() => {
     setRegularQuantity(1);
-    setVeganQuantity(1);
-    setIsVegan(false);
     setShowScrollHint(false);
   }, [id]);
 
@@ -81,91 +77,29 @@ const ProductPage = () => {
   }
 
   const handleAddToCart = () => {
-    // When vegan is toggled ON, add both regular and vegan if regularQuantity > 0
-    if (isVegan) {
-      // Add regular items if any
-      if (regularQuantity > 0) {
-        addItem({
-          id: `${product.id}-reg`,
-          name: product.name,
-          price: product.price,
-          image: product.image,
-          category: product.category,
-          isVegan: false,
-          quantity: regularQuantity,
-        });
-      }
-      // Add vegan items
-      addItem({
-        id: `${product.id}-veg`,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        category: product.category,
-        isVegan: true,
-        quantity: veganQuantity,
-      });
-      const totalQty = regularQuantity + veganQuantity;
-      showNotification(
-        `Added ${totalQty} ${product.name} to your order!`,
-        regularQuantity > 0 
-          ? `${regularQuantity} Regular + ${veganQuantity} Vegan`
-          : `${veganQuantity} Vegan`
-      );
-      setShowScrollHint(true);
-    } else {
-      // Just add regular
-      addItem({
-        id: `${product.id}-reg`,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        category: product.category,
-        isVegan: false,
-        quantity: regularQuantity,
-      });
-      showNotification(
-        `Added ${regularQuantity} ${product.name} to your order!`,
-        "Regular option"
-      );
-      setShowScrollHint(true);
-    }
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category,
+      quantity: regularQuantity,
+    });
+    showNotification(
+      `Added ${regularQuantity} ${product.name} to your order!`
+    );
+    setShowScrollHint(true);
   };
 
   const handleBuyNow = () => {
-    // When vegan is toggled ON, add both regular and vegan if regularQuantity > 0
-    if (isVegan) {
-      if (regularQuantity > 0) {
-        addItem({
-          id: `${product.id}-reg`,
-          name: product.name,
-          price: product.price,
-          image: product.image,
-          category: product.category,
-          isVegan: false,
-          quantity: regularQuantity,
-        });
-      }
-      addItem({
-        id: `${product.id}-veg`,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        category: product.category,
-        isVegan: true,
-        quantity: veganQuantity,
-      });
-    } else {
-      addItem({
-        id: `${product.id}-reg`,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        category: product.category,
-        isVegan: false,
-        quantity: regularQuantity,
-      });
-    }
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category,
+      quantity: regularQuantity,
+    });
     navigate("/checkout");
   };
 
@@ -252,65 +186,17 @@ const ProductPage = () => {
               </p>
             </div>
 
-            {/* Vegan Toggle */}
-            <div className="flex items-center justify-between bg-card rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-soft">
-              <div className="flex items-center gap-2">
-                <Leaf className={cn(
-                  "w-4 h-4 sm:w-5 sm:h-5 transition-colors",
-                  isVegan ? "text-mint" : "text-muted-foreground"
-                )} />
-                <span className="text-foreground font-medium font-body">
-                  Vegan
-                </span>
-              </div>
-              <motion.button
-                className={cn(
-                  "relative w-14 h-8 rounded-full p-1 transition-colors duration-300",
-                  isVegan ? "bg-mint" : "bg-secondary"
-                )}
-                onClick={() => {
-                  const newIsVegan = !isVegan;
-                  setIsVegan(newIsVegan);
-                  // Reset regular quantity to 1 when turning vegan off
-                  if (!newIsVegan && regularQuantity === 0) {
-                    setRegularQuantity(1);
-                  }
-                }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <motion.div
-                  className="w-6 h-6 bg-card rounded-full shadow-medium"
-                  animate={{ x: isVegan ? 24 : 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                />
-              </motion.button>
-            </div>
-
-            {/* Quantity Selectors */}
+            {/* Quantity Selector */}
             <div className="space-y-3 sm:space-y-4">
-              {/* Regular Quantity */}
               <div className="flex items-center justify-between bg-card rounded-xl p-3 sm:p-4 shadow-soft transition-all">
                 <div className="flex items-center gap-2">
                   <Cookie className="w-4 h-4 sm:w-5 sm:h-5 transition-colors text-caramel" />
-                  <div className="relative h-5 sm:h-6 overflow-hidden">
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={isVegan ? "regular" : "quantity"}
-                        className="text-foreground text-sm sm:text-base font-medium font-body block"
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -20, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
-                      >
-                        {isVegan ? "Regular" : "Quantity"}
-                      </motion.span>
-                    </AnimatePresence>
-                  </div>
+                  <span className="text-foreground text-sm sm:text-base font-medium font-body">Quantity</span>
                 </div>
                 <div className="flex items-center bg-secondary rounded-xl overflow-hidden">
                   <motion.button
                     className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
-                    onClick={() => setRegularQuantity(Math.max(isVegan ? 0 : 1, regularQuantity - 1))}
+                    onClick={() => setRegularQuantity(Math.max(1, regularQuantity - 1))}
                     whileTap={{ scale: 0.85 }}
                     aria-label="Decrease quantity"
                   >
@@ -329,45 +215,6 @@ const ProductPage = () => {
                   </motion.button>
                 </div>
               </div>
-
-              {/* Vegan Quantity - only show when vegan is toggled on */}
-              <AnimatePresence>
-                {isVegan && (
-                  <motion.div
-                    className="flex items-center justify-between bg-mint/20 border-2 border-mint rounded-xl p-3 sm:p-4"
-                    initial={{ opacity: 0, y: -10, height: 0, marginTop: 0 }}
-                    animate={{ opacity: 1, y: 0, height: "auto", marginTop: 12 }}
-                    exit={{ opacity: 0, y: -10, height: 0, marginTop: 0 }}
-                    transition={{ duration: 0.25, ease: "easeInOut" }}
-                  >
-                  <div className="flex items-center gap-2">
-                    <Leaf className="w-4 h-4 sm:w-5 sm:h-5 text-mint" />
-                    <span className="text-foreground text-sm sm:text-base font-medium font-body">Vegan</span>
-                  </div>
-                  <div className="flex items-center bg-card rounded-xl overflow-hidden shadow-soft">
-                    <motion.button
-                      className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
-                      onClick={() => setVeganQuantity(Math.max(1, veganQuantity - 1))}
-                      whileTap={{ scale: 0.85 }}
-                      aria-label="Decrease vegan quantity"
-                    >
-                      <Minus className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </motion.button>
-                    <span className="w-10 sm:w-12 text-center text-lg sm:text-xl font-semibold text-mint">
-                      {veganQuantity}
-                    </span>
-                    <motion.button
-                      className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
-                      onClick={() => setVeganQuantity(veganQuantity + 1)}
-                      whileTap={{ scale: 0.85 }}
-                      aria-label="Increase vegan quantity"
-                    >
-                      <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </motion.button>
-                  </div>
-                </motion.div>
-                )}
-              </AnimatePresence>
             </div>
 
             {/* Action Buttons */}
@@ -489,7 +336,7 @@ const ProductPage = () => {
       <Footer />
     </div>
   );
-};
+});
 
 // Simple related product card
 const RelatedProductCard = ({ product, index }: { product: Product; index: number }) => {
@@ -523,5 +370,7 @@ const RelatedProductCard = ({ product, index }: { product: Product; index: numbe
     </motion.div>
   );
 };
+
+ProductPage.displayName = "ProductPage";
 
 export default ProductPage;

@@ -29,7 +29,7 @@ const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: Pro
 
   return (
     <motion.div
-      className="relative bg-card rounded-3xl overflow-hidden shadow-soft cursor-pointer touch-manipulation"
+      className="group relative bg-card rounded-3xl overflow-hidden shadow-soft cursor-pointer touch-manipulation"
       style={{ 
         transformStyle: "preserve-3d", 
         perspective: "1000px",
@@ -54,7 +54,7 @@ const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: Pro
       onClick={handleCardClick}
     >
       {/* Image Container */}
-      <div className="relative h-48 sm:h-52 md:h-56 overflow-hidden bg-white flex items-center justify-center p-3 sm:p-4">
+      <div className="relative h-32 sm:h-52 md:h-56 overflow-hidden bg-white flex items-center justify-center p-2 sm:p-4">
         {/* Loading placeholder */}
         {!imageLoaded && (
           <div className="absolute inset-0 bg-secondary animate-pulse" />
@@ -72,32 +72,24 @@ const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: Pro
           transition={{ duration: 0.3, ease: "easeOut" }}
         />
 
-        {/* Cart icon - appears on hover/touch */}
-        <motion.button
-          className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-primary text-primary-foreground p-2 sm:p-2.5 rounded-full shadow-medium touch-manipulation"
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{
-            opacity: isHovered ? 1 : 0,
-            scale: isHovered ? 1 : 0.5,
-          }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          transition={{ duration: 0.15 }}
+        {/* Cart icon - always visible on mobile, hover on desktop */}
+        <button
+          className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-primary text-primary-foreground w-8 h-8 sm:w-10 sm:h-10 !min-h-0 flex items-center justify-center rounded-full shadow-medium touch-manipulation opacity-100 scale-100 md:opacity-0 md:scale-75 md:group-hover:opacity-100 md:group-hover:scale-100 transition-all duration-200 hover:scale-110 active:scale-90"
           onClick={handleAddToCart}
           onTouchEnd={handleAddToCart}
           aria-label={`Add ${name} to cart`}
         >
           <ShoppingBag className="w-4 h-4" />
-        </motion.button>
+        </button>
       </div>
 
       {/* Content - Just name and price */}
-      <div className="p-3 sm:p-4">
-        <div className="flex justify-between items-center gap-2">
-          <h3 className="font-display text-base sm:text-lg font-semibold text-foreground leading-tight line-clamp-1">
+      <div className="p-2 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-0.5 sm:gap-2">
+          <h3 className="font-display text-sm sm:text-lg font-semibold text-foreground leading-tight line-clamp-1">
             {name}
           </h3>
-          <span className="text-base sm:text-lg font-bold text-primary font-body whitespace-nowrap">
+          <span className="text-sm sm:text-lg font-bold text-primary font-body whitespace-nowrap">
             ${price.toFixed(2)}
           </span>
         </div>

@@ -340,4 +340,46 @@
 @media print {
   .no-print {
     display: none !important;
-  }}
+  }
+}
+
+/* Date input styling for iOS Safari */
+input[type="date"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  min-height: 2.5rem;
+  position: relative;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  padding-left: 0;
+}
+
+/* Hide native calendar icon - we use our own */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+/* Prevent iOS zoom on input focus */
+@media screen and (-webkit-min-device-pixel-ratio: 0) and (max-width: 767px) {
+  input[type="date"],
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

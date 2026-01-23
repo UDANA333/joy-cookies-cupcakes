@@ -6,7 +6,7 @@ import Footer from "@/components/Footer";
 import FloatingShapes from "@/components/FloatingShapes";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
-import heroImage from "@/assets/hero-banner.jpg";
+import heroImage from "@/assets/hero-banner.webp";
 
 const About = memo(() => {
   const { totalItems } = useCart();

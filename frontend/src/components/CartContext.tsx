@@ -1,11 +1,13 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef } from "react";
+
+const NOTIFICATION_DURATION = 3000;
+const CART_STORAGE_KEY = 'joy-cookies-cart';
 
 export interface CartItem {
   id: string;
   name: string;
   price: number;
   quantity: number;
-  isVegan: boolean;
   image: string;
   category: string;
 }
@@ -32,19 +34,43 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  const [items, setItems] = useState<CartItem[]>([]);
+  // Initialize cart from localStorage
+  const [items, setItems] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(CART_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [notification, setNotification] = useState<CartNotification>({
     message: "",
     description: "",
     visible: false,
   });
+  
+  // Ref for timeout cleanup
+  const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Persist cart to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // Storage might be full or disabled
+    }
+  }, [items]);
 
   const showNotification = useCallback((message: string, description?: string) => {
+    // Clear any existing timeout
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
     setNotification({ message, description, visible: true });
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
+    // Auto-hide after duration
+    notificationTimeoutRef.current = setTimeout(() => {
       setNotification((prev) => ({ ...prev, visible: false }));
-    }, 3000);
+    }, NOTIFICATION_DURATION);
   }, []);
 
   const hideNotification = useCallback(() => {
@@ -54,7 +80,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const addItem = (newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
     setItems((prev) => {
       const existingIndex = prev.findIndex(
-        (item) => item.id === newItem.id && item.isVegan === newItem.isVegan
+        (item) => item.id === newItem.id
       );
       
       if (existingIndex > -1) {

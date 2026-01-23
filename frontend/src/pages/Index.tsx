@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -7,7 +7,7 @@ import FloatingShapes from "@/components/FloatingShapes";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
 import { products } from "@/data/products";
-import heroImage from "@/assets/hero-banner.jpg";
+import heroImage from "@/assets/hero-banner.webp";
 
 type Category = "all" | "cookies" | "cupcakes" | "cakepops";
 
@@ -18,7 +18,7 @@ const categories: { id: Category; label: string }[] = [
   { id: "cakepops", label: "Cake Pops" },
 ];
 
-const Index = () => {
+const Index = memo(() => {
   const [activeCategory, setActiveCategory] = useState<Category>("all");
   const { addItem, totalItems, showNotification } = useCart();
 
@@ -26,7 +26,7 @@ const Index = () => {
     ? products 
     : products.filter(p => p.category === activeCategory);
 
-  const handleAddToCart = (id: string) => {
+  const handleAddToCart = useCallback((id: string) => {
     const product = products.find(p => p.id === id);
     if (product) {
       addItem({
@@ -35,12 +35,11 @@ const Index = () => {
         price: product.price,
         image: product.image,
         category: product.category,
-        isVegan: false,
         quantity: 1,
       });
       showNotification(`Added ${product.name} to your order!`);
     }
-  };
+  }, [addItem, showNotification]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -183,7 +182,7 @@ const Index = () => {
                   Cookies
                 </motion.h3>
                 <motion.div
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
                   layout
                 >
                   {products.filter(p => p.category === "cookies").map((product, index) => (
@@ -216,7 +215,7 @@ const Index = () => {
                   Cupcakes
                 </motion.h3>
                 <motion.div
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
                   layout
                 >
                   {products.filter(p => p.category === "cupcakes").map((product, index) => (
@@ -249,7 +248,7 @@ const Index = () => {
                   Cake Pops
                 </motion.h3>
                 <motion.div
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
                   layout
                 >
                   {products.filter(p => p.category === "cakepops").map((product, index) => (
@@ -272,7 +271,7 @@ const Index = () => {
             </div>
           ) : (
             <motion.div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
               layout
             >
               {filteredProducts.map((product, index) => (
@@ -322,6 +321,8 @@ const Index = () => {
       <Footer />
     </div>
   );
-};
+});
+
+Index.displayName = "Index";
 
 export default Index;

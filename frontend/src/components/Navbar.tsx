@@ -47,8 +47,8 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
                 alt="Joy Cookies & Cupcakes" 
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain rounded-lg"
               />
-              <span className="font-display text-lg sm:text-xl md:text-2xl font-semibold text-foreground">
-                Joy <span className="text-primary">Cookies</span>
+              <span className="font-display text-base sm:text-lg md:text-xl font-semibold text-foreground">
+                Joy <span className="text-primary">Cookies & Cupcakes</span>
               </span>
             </motion.div>
           </Link>
@@ -56,24 +56,29 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1 lg:gap-2">
             {links.map((link) => (
-              <Link key={link.path} to={link.path} className="touch-manipulation">
+              <Link key={link.path} to={link.path} className="touch-manipulation group">
                 <motion.div
                   className={cn(
                     "relative px-4 lg:px-5 py-2 rounded-xl font-body font-medium text-base lg:text-lg transition-colors",
                     isActive(link.path)
                       ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground group-hover:text-primary"
                   )}
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
                 >
                   {link.label}
+                  {/* Active dot */}
                   {isActive(link.path) && (
                     <motion.div
                       className="absolute bottom-0 left-1/2 w-1.5 h-1.5 rounded-full bg-primary"
                       layoutId="activeNav"
                       style={{ x: "-50%" }}
                     />
+                  )}
+                  {/* Hover dot - only show when not active */}
+                  {!isActive(link.path) && (
+                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary scale-0 group-hover:scale-100 transition-transform duration-200" />
                   )}
                 </motion.div>
               </Link>
@@ -113,7 +118,7 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -10, scale: 0.9 }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    className="absolute top-full right-0 mt-2 w-56 sm:w-64 bg-background border border-border rounded-xl shadow-lifted p-2.5 sm:p-3 z-50"
+                    className="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-background border border-border rounded-xl shadow-lifted p-2.5 sm:p-3 z-50"
                     onClick={hideNotification}
                   >
                     {/* Arrow pointing up to bag */}
@@ -123,8 +128,8 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
                       <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                         <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                      <div className="flex-1">
+                        <p className="text-xs sm:text-sm font-medium text-foreground">
                           {notification.message}
                         </p>
                         {notification.description && (
@@ -177,7 +182,7 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
                       "block px-4 py-3 rounded-xl font-body font-medium text-base sm:text-lg transition-colors touch-manipulation",
                       isActive(link.path)
                         ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-secondary active:bg-secondary"
+                        : "text-foreground hover:bg-primary/10 hover:text-primary active:bg-primary/15"
                     )}
                   >
                     {link.label}

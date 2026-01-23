@@ -11,6 +11,58 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useCart } from "@/components/CartContext";
 
+// Sanitize text input to prevent XSS
+const sanitizeInput = (value: string, maxLength: number = 100): string => {
+  return value
+    .replace(/[<>]/g, '') // Remove angle brackets
+    .slice(0, maxLength);
+};
+
+// Email validation
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Common email domain typos and their corrections
+const EMAIL_TYPO_MAP: Record<string, string> = {
+  'gmail.con': 'gmail.com',
+  'gmail.cmo': 'gmail.com',
+  'gmial.com': 'gmail.com',
+  'gmal.com': 'gmail.com',
+  'gamil.com': 'gmail.com',
+  'hotmail.con': 'hotmail.com',
+  'hotmal.com': 'hotmail.com',
+  'yahoo.con': 'yahoo.com',
+  'yaho.com': 'yahoo.com',
+  'yahooo.com': 'yahoo.com',
+  'outloo.com': 'outlook.com',
+  'outlook.con': 'outlook.com',
+  'icloud.con': 'icloud.com',
+  'icoud.com': 'icloud.com',
+};
+
+interface EmailValidation {
+  isValid: boolean;
+  error: string | null;
+  suggestion: string | null;
+}
+
+const validateEmail = (email: string): EmailValidation => {
+  if (!email) return { isValid: true, error: null, suggestion: null };
+  
+  // Check basic format
+  if (!EMAIL_REGEX.test(email)) {
+    return { isValid: false, error: 'Please enter a valid email address', suggestion: null };
+  }
+  
+  // Check for common typos
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (domain && EMAIL_TYPO_MAP[domain]) {
+    const corrected = email.replace(domain, EMAIL_TYPO_MAP[domain]);
+    return { isValid: true, error: null, suggestion: `Did you mean ${corrected}?` };
+  }
+  
+  return { isValid: true, error: null, suggestion: null };
+};
+
 const Contact = memo(() => {
   const { totalItems } = useCart();
   const [formData, setFormData] = useState({
@@ -18,20 +70,37 @@ const Contact = memo(() => {
     email: "",
     message: "",
   });
+  const [emailValidation, setEmailValidation] = useState<EmailValidation>({ isValid: true, error: null, suggestion: null });
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    if (!emailValidation.isValid) {
+      toast.error("Please fix the email address before submitting");
+      return;
+    }
     toast.success("Message sent!", {
       description: "We'll get back to you soon with lots of love! 💕",
     });
     setFormData({ name: "", email: "", message: "" });
-  }, []);
+    setEmailValidation({ isValid: true, error: null, suggestion: null });
+  }, [emailValidation.isValid]);
 
   const handleInputChange = useCallback((
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    // Apply appropriate sanitization and length limits
+    if (name === 'name') {
+      setFormData(prev => ({ ...prev, name: sanitizeInput(value, 50) }));
+    } else if (name === 'email') {
+      const trimmed = value.slice(0, 100);
+      setFormData(prev => ({ ...prev, email: trimmed }));
+      setEmailValidation(validateEmail(trimmed));
+    } else if (name === 'message') {
+      setFormData(prev => ({ ...prev, message: sanitizeInput(value, 1000) }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   }, []);
 
   return (
@@ -90,6 +159,8 @@ const Contact = memo(() => {
                       value={formData.name}
                       onChange={handleInputChange}
                       placeholder="What should we call you?"
+                      maxLength={50}
+                      autoComplete="name"
                       className="mt-1.5 touch-manipulation"
                     />
                   </div>
@@ -106,8 +177,29 @@ const Contact = memo(() => {
                       onChange={handleInputChange}
                       placeholder="your@email.com"
                       required
-                      className="mt-1.5 touch-manipulation"
+                      maxLength={100}
+                      autoComplete="email"
+                      className={`mt-1.5 touch-manipulation ${emailValidation.error ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                     />
+                    {emailValidation.error && formData.email && (
+                      <p className="text-xs text-destructive mt-1">{emailValidation.error}</p>
+                    )}
+                    {emailValidation.suggestion && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const corrected = formData.email.replace(
+                            formData.email.split('@')[1],
+                            EMAIL_TYPO_MAP[formData.email.split('@')[1]?.toLowerCase()]
+                          );
+                          setFormData(prev => ({ ...prev, email: corrected }));
+                          setEmailValidation({ isValid: true, error: null, suggestion: null });
+                        }}
+                        className="text-xs text-primary hover:underline mt-1 text-left"
+                      >
+                        {emailValidation.suggestion}
+                      </button>
+                    )}
                   </div>
 
                   <div>
@@ -122,8 +214,12 @@ const Contact = memo(() => {
                       placeholder="Tell us what's on your mind... custom orders, questions, or just a friendly hello!"
                       rows={5}
                       required
+                      maxLength={1000}
                       className="mt-1.5 resize-none touch-manipulation"
                     />
+                    <p className="text-xs text-muted-foreground mt-1 text-right">
+                      {formData.message.length}/1000
+                    </p>
                   </div>
 
                   <Button variant="hero" size="xl" className="w-full touch-manipulation">

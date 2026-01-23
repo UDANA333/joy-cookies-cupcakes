@@ -18,8 +18,8 @@ const Footer = memo(() => {
           <div className="space-y-3 sm:space-y-4 text-center sm:text-left">
             <div className="flex items-center gap-2 justify-center sm:justify-start">
               <Heart className="w-5 h-5 text-primary fill-primary" />
-              <span className="font-display text-lg sm:text-xl font-semibold text-foreground">
-                Joy <span className="text-primary">Cookies</span>
+              <span className="font-display text-base sm:text-lg font-semibold text-foreground">
+                Joy <span className="text-primary">Cookies & Cupcakes</span>
               </span>
             </div>
             <p className="text-muted-foreground text-xs sm:text-sm max-w-xs mx-auto sm:mx-0">
@@ -32,7 +32,7 @@ const Footer = memo(() => {
             <h4 className="font-display text-base sm:text-lg font-semibold text-foreground">Quick Links</h4>
             <nav className="flex flex-row sm:flex-col gap-4 sm:gap-2 justify-center items-center">
               <Link to="/" className="text-muted-foreground hover:text-primary transition-colors text-sm touch-manipulation">
-                Menu
+                Home
               </Link>
               <Link to="/about" className="text-muted-foreground hover:text-primary transition-colors text-sm touch-manipulation">
                 About Us

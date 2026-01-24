@@ -14,6 +14,8 @@ import Confirmation from "./pages/Confirmation";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
+import AdminLogin from "./pages/admin/Login";
+import AdminDashboard from "./pages/admin/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,9 @@ const App = () => (
               <Route path="/confirmation" element={<Confirmation />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/about" element={<About />} />
+              {/* Admin Routes */}
+              <Route path="/admin" element={<AdminLogin />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

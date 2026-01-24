@@ -1,6 +1,6 @@
 import { useState, memo, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Send, Mail, MessageCircle, Heart } from "lucide-react";
+import { Send, Mail, MessageCircle, Heart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useCart } from "@/components/CartContext";
+import { submitContact } from "@/lib/api";
 
 // Sanitize text input to prevent XSS
 const sanitizeInput = (value: string, maxLength: number = 100): string => {
@@ -71,19 +72,42 @@ const Contact = memo(() => {
     message: "",
   });
   const [emailValidation, setEmailValidation] = useState<EmailValidation>({ isValid: true, error: null, suggestion: null });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailValidation.isValid) {
       toast.error("Please fix the email address before submitting");
       return;
     }
-    toast.success("Message sent!", {
-      description: "We'll get back to you soon with lots of love! 💕",
-    });
-    setFormData({ name: "", email: "", message: "" });
-    setEmailValidation({ isValid: true, error: null, suggestion: null });
-  }, [emailValidation.isValid]);
+    
+    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      await submitContact({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        message: formData.message.trim(),
+      });
+      
+      toast.success("Message sent!", {
+        description: "We'll get back to you soon with lots of love! 💕",
+      });
+      setFormData({ name: "", email: "", message: "" });
+      setEmailValidation({ isValid: true, error: null, suggestion: null });
+    } catch (error) {
+      toast.error("Failed to send message", {
+        description: error instanceof Error ? error.message : "Please try again later",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [emailValidation.isValid, formData]);
 
   const handleInputChange = useCallback((
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -222,9 +246,23 @@ const Contact = memo(() => {
                     </p>
                   </div>
 
-                  <Button variant="hero" size="xl" className="w-full touch-manipulation">
-                    <Send className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Send Message
+                  <Button 
+                    variant="hero" 
+                    size="xl" 
+                    className="w-full touch-manipulation"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+                        Send Message
+                      </>
+                    )}
                   </Button>
                 </motion.div>
               </form>

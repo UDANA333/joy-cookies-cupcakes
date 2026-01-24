@@ -10,22 +10,24 @@ import { Button } from "@/components/ui/button";
 const Confirmation = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { formData, totalPrice, paymentMethod } = (location.state as { 
-    formData: { firstName: string; email: string; pickupDate: string; pickupTime: string }; 
+  const { formData, totalPrice, orderNumber, items } = (location.state as { 
+    formData: { firstName: string; lastName?: string; email: string; pickupDate: string; pickupTime: string }; 
     totalPrice: number;
-    paymentMethod: string;
+    orderNumber: string;
+    items?: { id: string; name: string; price: number; quantity: number }[];
   }) || { 
     formData: null, 
     totalPrice: 0,
-    paymentMethod: "" 
+    orderNumber: "",
+    items: [],
   };
 
   // Redirect to home if accessed directly without order data
   useEffect(() => {
-    if (!formData || !formData.email) {
+    if (!formData || !formData.email || !orderNumber) {
       navigate('/', { replace: true });
     }
-  }, [formData, navigate]);
+  }, [formData, orderNumber, navigate]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
@@ -91,6 +93,14 @@ const Confirmation = memo(() => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.6 }}
               >
+                {/* Order Number */}
+                <div className="bg-primary/10 rounded-xl p-3 sm:p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Order Number</p>
+                  <p className="font-mono text-lg sm:text-xl font-bold text-primary tracking-wider">
+                    {orderNumber}
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-border">
                   <span className="text-sm sm:text-base text-muted-foreground">Order Total</span>
                   <span className="font-display text-xl sm:text-2xl font-bold text-primary">

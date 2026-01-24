@@ -8,7 +8,6 @@ import { AppError } from '../middleware/errorHandler';
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // Login validation
 const loginValidation = [
@@ -54,7 +53,7 @@ router.post('/login', loginValidation, async (req: Request, res: Response, next:
         name: admin.name,
       },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      { expiresIn: '7d' }
     );
 
     console.log(`🔐 Admin logged in: ${admin.email}`);

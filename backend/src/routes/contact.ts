@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/database';
+import db from '../db/database';
 import { AppError } from '../middleware/errorHandler';
 import { sendContactNotification } from '../services/email';
 

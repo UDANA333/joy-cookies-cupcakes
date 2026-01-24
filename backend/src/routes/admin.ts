@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
-import { db } from '../db/database';
+import db from '../db/database';
 import { AppError } from '../middleware/errorHandler';
 import { authenticateAdmin } from '../middleware/auth';
 

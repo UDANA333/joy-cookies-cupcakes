@@ -16,6 +16,7 @@ import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
+import AdminSetup from "./pages/admin/Setup";
 
 const queryClient = new QueryClient();
 
@@ -36,9 +37,13 @@ const App = () => (
               <Route path="/confirmation" element={<Confirmation />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/about" element={<About />} />
-              {/* Admin Routes */}
-              <Route path="/admin" element={<AdminLogin />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              {/* Admin Routes - SECRET URLs */}
+              <Route path="/joy-manage-2024" element={<AdminLogin />} />
+              <Route path="/joy-manage-2024/dashboard" element={<AdminDashboard />} />
+              <Route path="/joy-setup-device" element={<AdminSetup />} />
+              {/* Old admin URL redirects to 404 */}
+              <Route path="/admin" element={<NotFound />} />
+              <Route path="/admin/*" element={<NotFound />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -1,5 +1,18 @@
 // API service for backend communication
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Dynamically determine API URL based on current host (for mobile access via network IP)
+function getApiBaseUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // If accessing via network IP, use same IP for API
+  const host = window.location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1') {
+    return `http://${host}:3001/api`;
+  }
+  return 'http://localhost:3001/api';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface OrderItem {
   id: string;

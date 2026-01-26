@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from './errorHandler';
+import db from '../db/database';
 
 interface JwtPayload {
   id: string;
   email: string;
+  deviceToken?: string;
 }
 
 declare global {
@@ -13,6 +15,14 @@ declare global {
       admin?: JwtPayload;
     }
   }
+}
+
+// Check if device is still registered and active
+function isDeviceValid(deviceToken: string | undefined): boolean {
+  // For backward compatibility: if no deviceToken in JWT (old sessions), allow but they'll need to re-login eventually
+  if (!deviceToken) return true;
+  const device = db.prepare('SELECT * FROM registered_devices WHERE token = ? AND is_active = 1').get(deviceToken);
+  return !!device;
 }
 
 export function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
@@ -31,6 +41,12 @@ export function authenticateAdmin(req: Request, res: Response, next: NextFunctio
     }
 
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+    
+    // Check if device is still valid (not deleted or disabled)
+    if (!isDeviceValid(decoded.deviceToken)) {
+      throw new AppError('Device access revoked', 403);
+    }
+    
     req.admin = decoded;
     next();
   } catch (error) {

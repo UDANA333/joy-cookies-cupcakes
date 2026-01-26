@@ -1,19 +1,54 @@
 import { memo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Lock, Loader2, AlertCircle } from "lucide-react";
+import { Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Dynamically determine API URL based on current host (for mobile access via network IP)
+function getApiUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  const host = window.location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1') {
+    return `http://${host}:3001/api`;
+  }
+  return 'http://localhost:3001/api';
+}
+
+const API_URL = getApiUrl();
 
 const AdminLogin = memo(() => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deviceToken] = useState(() => localStorage.getItem('admin_device_token'));
+
+  // Check if device is registered
+  if (!deviceToken) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <ShieldX className="w-8 h-8 text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Device Not Authorized</h1>
+            <p className="text-gray-500 mb-6">This device is not registered for admin access. Please contact the administrator.</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   // Check if already logged in
   useEffect(() => {
@@ -23,7 +58,7 @@ const AdminLogin = memo(() => {
       fetch(`${API_URL}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((res) => res.ok && navigate('/admin/dashboard', { replace: true }))
+        .then((res) => res.ok && navigate('/joy-manage-2024/dashboard', { replace: true }))
         .catch(() => localStorage.removeItem('admin_token'));
     }
   }, [navigate]);
@@ -37,7 +72,7 @@ const AdminLogin = memo(() => {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, deviceToken }),
       });
 
       const data = await response.json();
@@ -49,13 +84,13 @@ const AdminLogin = memo(() => {
       // Store token and redirect
       localStorage.setItem('admin_token', data.token);
       localStorage.setItem('admin_user', JSON.stringify(data.admin));
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/joy-manage-2024/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
     }
-  }, [email, password, navigate]);
+  }, [email, password, deviceToken, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
@@ -100,15 +135,30 @@ const AdminLogin = memo(() => {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button

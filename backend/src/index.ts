@@ -13,15 +13,23 @@ import adminRoutes from './routes/admin';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Security middleware
-app.use(helmet());
-
-// CORS configuration
+// CORS configuration - MUST be before other middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:8080',
+  origin: [
+    'http://localhost:8080', 
+    'http://localhost:5173', 
+    'http://127.0.0.1:8080',
+    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:\d+$/  // Allow any 192.168.x.x network IP
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Security middleware (after CORS) - disable CSP for development
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false, // Disable CSP in development
 }));
 
 // Rate limiting
@@ -34,13 +42,17 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Stricter rate limit for auth routes
+// Stricter rate limit for login attempts
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // limit each IP to 5 login attempts per windowMs
   message: { error: 'Too many login attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for non-login auth routes (device registration, etc.)
+    return !req.path.includes('/login');
+  },
 });
 
 // Body parsing
@@ -52,11 +64,27 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug: Check if routes are loaded
+app.get('/api/debug', (req, res) => {
+  res.json({ 
+    routes: 'loaded',
+    orderRoutes: !!orderRoutes,
+    contactRoutes: !!contactRoutes,
+    authRoutes: !!authRoutes,
+    adminRoutes: !!adminRoutes
+  });
+});
+
 // API Routes
+console.log('📍 Mounting routes...');
 app.use('/api/orders', orderRoutes);
+console.log('  ✓ /api/orders mounted');
 app.use('/api/contact', contactRoutes);
+console.log('  ✓ /api/contact mounted');
 app.use('/api/auth', authLimiter, authRoutes);
+console.log('  ✓ /api/auth mounted');
 app.use('/api/admin', adminRoutes);
+console.log('  ✓ /api/admin mounted');
 
 // 404 handler
 app.use((req, res) => {

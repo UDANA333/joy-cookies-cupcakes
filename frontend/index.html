@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;" />
+    <!-- CSP: http://localhost:* and network IPs are for development only. In production, replace with your actual API domain -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:* http://192.168.*:* https:;" />
     <link rel="icon" type="image/jpeg" href="/logo.jpeg" />
     <title>Joy Cookies & Cupcakes</title>
     <meta name="description" content="Fresh-baked cookies, cupcakes & cake pops made with love. Pre-order for easy pickup!" />

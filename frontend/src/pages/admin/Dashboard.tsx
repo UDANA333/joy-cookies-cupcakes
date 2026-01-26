@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
   MessageSquare,
@@ -18,6 +18,16 @@ import {
   TrendingUp,
   Mail,
   Calendar,
+  Key,
+  Eye,
+  EyeOff,
+  Settings,
+  Smartphone,
+  Copy,
+  Plus,
+  Pencil,
+  Monitor,
+  ShieldX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +37,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -63,6 +83,15 @@ interface Stats {
   unreadMessages: number;
 }
 
+interface Device {
+  id: number;
+  name: string;
+  browser_info: string;
+  last_used: string | null;
+  registered_via: string;
+  created_at: string;
+}
+
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
   confirmed: "bg-blue-100 text-blue-800",
@@ -73,12 +102,35 @@ const statusColors: Record<string, string> = {
 
 const AdminDashboard = memo(() => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"orders" | "messages">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "messages" | "devices">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [adminUser, setAdminUser] = useState<{ name: string; email: string } | null>(null);
+  
+  // Devices state
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [showGenerateCodeDialog, setShowGenerateCodeDialog] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [editingDeviceId, setEditingDeviceId] = useState<number | null>(null);
+  const [editDeviceName, setEditDeviceName] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
+  
+  // Change password state
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [deviceRevoked, setDeviceRevoked] = useState(false);
 
   const getAuthHeaders = useCallback(() => {
     const token = localStorage.getItem("admin_token");
@@ -88,13 +140,46 @@ const AdminDashboard = memo(() => {
     };
   }, []);
 
+  // Check if device is still valid (poll every 5 seconds)
+  useEffect(() => {
+    const checkDeviceValidity = async () => {
+      const deviceToken = localStorage.getItem("admin_device_token");
+      if (!deviceToken) return;
+      
+      try {
+        const res = await fetch(`${API_URL}/auth/check-device`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceToken }),
+        });
+        
+        if (!res.ok) {
+          // Device was revoked!
+          setDeviceRevoked(true);
+          localStorage.removeItem("admin_token");
+          localStorage.removeItem("admin_user");
+          localStorage.removeItem("admin_device_token");
+        }
+      } catch (error) {
+        // Network error, don't logout
+        console.error("Device check failed:", error);
+      }
+    };
+
+    // Check immediately and then every 5 seconds
+    checkDeviceValidity();
+    const interval = setInterval(checkDeviceValidity, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
   // Check authentication
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
     const user = localStorage.getItem("admin_user");
 
     if (!token) {
-      navigate("/admin", { replace: true });
+      navigate("/joy-manage-2024", { replace: true });
       return;
     }
 
@@ -114,9 +199,15 @@ const AdminDashboard = memo(() => {
       ]);
 
       if (!ordersRes.ok || !messagesRes.ok || !statsRes.ok) {
-        if (ordersRes.status === 401) {
+        // Handle both 401 (invalid token) and 403 (device revoked)
+        if (ordersRes.status === 401 || ordersRes.status === 403) {
           localStorage.removeItem("admin_token");
-          navigate("/admin", { replace: true });
+          localStorage.removeItem("admin_user");
+          if (ordersRes.status === 403) {
+            localStorage.removeItem("admin_device_token"); // Device was revoked
+            alert("Your device access has been revoked. Please contact the administrator.");
+          }
+          navigate("/joy-manage-2024", { replace: true });
           return;
         }
         throw new Error("Failed to fetch data");
@@ -145,8 +236,149 @@ const AdminDashboard = memo(() => {
   const handleLogout = useCallback(() => {
     localStorage.removeItem("admin_token");
     localStorage.removeItem("admin_user");
-    navigate("/admin", { replace: true });
+    navigate("/joy-manage-2024", { replace: true });
   }, [navigate]);
+
+  // Change password handler
+  const handleChangePassword = useCallback(async () => {
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError("All fields are required");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters");
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const res = await fetch(`${API_URL}/auth/change-password`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPasswordError(data.error || "Failed to change password");
+        return;
+      }
+
+      setPasswordSuccess("Password changed successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      
+      // Close dialog after 2 seconds
+      setTimeout(() => {
+        setShowPasswordDialog(false);
+        setPasswordSuccess("");
+      }, 2000);
+    } catch (error) {
+      setPasswordError("Network error. Please try again.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }, [currentPassword, newPassword, confirmPassword, getAuthHeaders]);
+
+  // ============================================
+  // DEVICE MANAGEMENT FUNCTIONS
+  // ============================================
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/devices`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setDevices(data.devices);
+      }
+    } catch (error) {
+      console.error("Error fetching devices:", error);
+    }
+  }, [getAuthHeaders]);
+
+  const generateDeviceCode = useCallback(async () => {
+    setIsGeneratingCode(true);
+    setGeneratedCode(null);
+    try {
+      const res = await fetch(`${API_URL}/auth/devices/generate-code`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setGeneratedCode(data.code);
+        setCodeExpiresAt(data.expiresAt);
+      }
+    } catch (error) {
+      console.error("Error generating code:", error);
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  }, [getAuthHeaders]);
+
+  const copyCodeToClipboard = useCallback(() => {
+    if (generatedCode) {
+      navigator.clipboard.writeText(generatedCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    }
+  }, [generatedCode]);
+
+  const deleteDevice = useCallback(async (deviceId: number) => {
+    if (!window.confirm("Are you sure you want to revoke this device's access? They will be logged out immediately.")) return;
+    try {
+      const res = await fetch(`${API_URL}/auth/devices/${deviceId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("Delete failed:", data);
+        alert(`Failed to delete device: ${data.error || 'Unknown error'}`);
+        return;
+      }
+      fetchDevices();
+    } catch (error) {
+      console.error("Error deleting device:", error);
+      alert("Network error while deleting device");
+    }
+  }, [getAuthHeaders, fetchDevices]);
+
+  const saveDeviceName = useCallback(async (deviceId: number) => {
+    try {
+      await fetch(`${API_URL}/auth/devices/${deviceId}/name`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ name: editDeviceName }),
+      });
+      setEditingDeviceId(null);
+      fetchDevices();
+    } catch (error) {
+      console.error("Error renaming device:", error);
+    }
+  }, [getAuthHeaders, editDeviceName, fetchDevices]);
+
+  // Fetch devices when switching to devices tab
+  useEffect(() => {
+    if (activeTab === "devices") {
+      fetchDevices();
+    }
+  }, [activeTab, fetchDevices]);
 
   const updateOrderStatus = useCallback(
     async (orderId: string, status: string) => {
@@ -243,6 +475,33 @@ const AdminDashboard = memo(() => {
     });
   };
 
+  // Show revoked overlay if device was deleted
+  if (deviceRevoked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <ShieldX className="w-8 h-8 text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Revoked</h1>
+            <p className="text-gray-500 mb-6">Your device access has been revoked by an administrator. Please contact them if you need access restored.</p>
+            <Button 
+              onClick={() => navigate("/joy-manage-2024", { replace: true })}
+              variant="outline"
+            >
+              Back to Login
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -272,7 +531,16 @@ const AdminDashboard = memo(() => {
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Button>
-              <span className="text-sm text-gray-500">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPasswordDialog(true)}
+                className="gap-2"
+              >
+                <Key className="w-4 h-4" />
+                <span className="hidden sm:inline">Password</span>
+              </Button>
+              <span className="text-sm text-gray-500 hidden sm:inline">
                 {adminUser?.name || adminUser?.email}
               </span>
               <Button
@@ -282,12 +550,120 @@ const AdminDashboard = memo(() => {
                 className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
               >
                 <LogOut className="w-4 h-4" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              Change Password
+            </DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {passwordError && (
+              <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                {passwordError}
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                {passwordSuccess}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <div className="relative">
+                <Input
+                  id="current-password"
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password (min 8 chars)"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordDialog(false);
+                setCurrentPassword("");
+                setNewPassword("");
+                setConfirmPassword("");
+                setPasswordError("");
+                setPasswordSuccess("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={isChangingPassword}
+              className="gap-2"
+            >
+              {isChangingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
+              Change Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
@@ -365,7 +741,7 @@ const AdminDashboard = memo(() => {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 flex-wrap">
           <Button
             variant={activeTab === "orders" ? "default" : "outline"}
             onClick={() => setActiveTab("orders")}
@@ -381,6 +757,14 @@ const AdminDashboard = memo(() => {
           >
             <MessageSquare className="w-4 h-4" />
             Messages ({messages.length})
+          </Button>
+          <Button
+            variant={activeTab === "devices" ? "default" : "outline"}
+            onClick={() => setActiveTab("devices")}
+            className="gap-2"
+          >
+            <Smartphone className="w-4 h-4" />
+            Devices
           </Button>
         </div>
 
@@ -597,6 +981,183 @@ const AdminDashboard = memo(() => {
             )}
           </div>
         )}
+
+        {/* Devices Tab */}
+        {activeTab === "devices" && (
+          <div className="space-y-6">
+            {/* Generate Code Card */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Device Access Codes</h3>
+                  <p className="text-sm text-gray-500">Generate one-time codes for new devices</p>
+                </div>
+                <Button
+                  onClick={() => {
+                    setGeneratedCode(null);
+                    setShowGenerateCodeDialog(true);
+                    generateDeviceCode();
+                  }}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Generate Code
+                </Button>
+              </div>
+            </div>
+
+            {/* Devices List */}
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+              <div className="p-4 border-b bg-gray-50">
+                <h3 className="font-semibold">Registered Devices ({devices.length})</h3>
+              </div>
+              {devices.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No devices registered yet
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {devices.map((device) => (
+                    <div key={device.id} className="p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start gap-4">
+                        <div className="p-2 rounded-lg bg-green-100">
+                          <Monitor className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {editingDeviceId === device.id ? (
+                            <div className="flex items-center gap-2 mb-1">
+                              <Input
+                                value={editDeviceName}
+                                onChange={(e) => setEditDeviceName(e.target.value)}
+                                className="h-8 w-48"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveDeviceName(device.id);
+                                  if (e.key === 'Escape') setEditingDeviceId(null);
+                                }}
+                              />
+                              <Button size="sm" variant="ghost" onClick={() => saveDeviceName(device.id)}>
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingDeviceId(null)}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium">{device.name}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  setEditingDeviceId(device.id);
+                                  setEditDeviceName(device.name);
+                                }}
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-500 space-y-1">
+                            <p>{device.browser_info || 'Unknown browser'}</p>
+                            <p className="text-xs">
+                              Registered: {new Date(device.created_at).toLocaleDateString()} via {device.registered_via}
+                              {device.last_used && (
+                                <> • Last used: {new Date(device.last_used).toLocaleDateString()}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteDevice(device.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Revoke
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Generate Code Dialog */}
+        <Dialog open={showGenerateCodeDialog} onOpenChange={setShowGenerateCodeDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5" />
+                Device Access Code
+              </DialogTitle>
+              <DialogDescription>
+                Share this code with someone to register their device. It expires in 24 hours and can only be used once.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {isGeneratingCode ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : generatedCode ? (
+                <div className="space-y-4">
+                  <div className="bg-gray-100 rounded-lg p-4 text-center">
+                    <p className="text-3xl font-mono font-bold tracking-widest text-primary">
+                      {generatedCode}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={copyCodeToClipboard}
+                    variant="outline"
+                    className="w-full gap-2"
+                  >
+                    {codeCopied ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy Code
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-gray-500 text-center">
+                    Expires: {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString() : '24 hours'}
+                  </p>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                    <p className="text-amber-800">
+                      <strong>Instructions:</strong> Send this code to the person who needs access. 
+                      They should go to <span className="font-mono">/joy-setup-device</span> and enter this code.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Failed to generate code. Please try again.
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowGenerateCodeDialog(false)}>
+                Close
+              </Button>
+              {generatedCode && (
+                <Button onClick={generateDeviceCode} disabled={isGeneratingCode}>
+                  Generate New Code
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

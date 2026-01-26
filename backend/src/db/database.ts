@@ -30,6 +30,29 @@ export function initDatabase() {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Registered devices table (for admin access control)
+    CREATE TABLE IF NOT EXISTS registered_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT UNIQUE NOT NULL,
+      name TEXT,
+      browser_info TEXT,
+      is_active INTEGER DEFAULT 1,
+      last_used TEXT,
+      registered_via TEXT DEFAULT 'code',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Device access codes (one-time codes for registering new devices)
+    CREATE TABLE IF NOT EXISTS device_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      is_used INTEGER DEFAULT 0,
+      used_by_device_id INTEGER,
+      expires_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (used_by_device_id) REFERENCES registered_devices(id)
+    );
+
     -- Orders table
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
@@ -66,9 +89,57 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
     CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
     CREATE INDEX IF NOT EXISTS idx_contact_is_read ON contact_messages(is_read);
+    CREATE INDEX IF NOT EXISTS idx_devices_token ON registered_devices(token);
   `);
 
+  // Run migrations for existing databases
+  runMigrations();
+
   console.log('📦 Database tables created/verified');
+}
+
+// Migration function to add new columns to existing tables
+function runMigrations() {
+  // Check if browser_info column exists in registered_devices
+  const tableInfo = db.prepare("PRAGMA table_info(registered_devices)").all() as Array<{ name: string }>;
+  const columnNames = tableInfo.map(col => col.name);
+
+  // Add browser_info column if it doesn't exist
+  if (!columnNames.includes('browser_info')) {
+    try {
+      db.exec("ALTER TABLE registered_devices ADD COLUMN browser_info TEXT");
+      console.log('  ✓ Migration: Added browser_info column');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Add registered_via column if it doesn't exist
+  if (!columnNames.includes('registered_via')) {
+    try {
+      db.exec("ALTER TABLE registered_devices ADD COLUMN registered_via TEXT DEFAULT 'code'");
+      console.log('  ✓ Migration: Added registered_via column');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Check if device_codes table exists
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='device_codes'").all();
+  if (tables.length === 0) {
+    db.exec(`
+      CREATE TABLE device_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        is_used INTEGER DEFAULT 0,
+        used_by_device_id INTEGER,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (used_by_device_id) REFERENCES registered_devices(id)
+      )
+    `);
+    console.log('  ✓ Migration: Created device_codes table');
+  }
 }
 
 export default db;

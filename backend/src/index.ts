@@ -9,6 +9,7 @@ import orderRoutes from './routes/orders';
 import contactRoutes from './routes/contact';
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
+import productRoutes from './routes/products';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -85,6 +86,8 @@ app.use('/api/auth', authLimiter, authRoutes);
 console.log('  ✓ /api/auth mounted');
 app.use('/api/admin', adminRoutes);
 console.log('  ✓ /api/admin mounted');
+app.use('/api/products', productRoutes);
+console.log('  ✓ /api/products mounted');
 
 // 404 handler
 app.use((req, res) => {

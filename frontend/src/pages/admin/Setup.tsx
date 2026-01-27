@@ -46,9 +46,43 @@ const AdminSetup = memo(() => {
   const [success, setSuccess] = useState(false);
   const [isBootstrap, setIsBootstrap] = useState<boolean | null>(null);
   const [checkingBootstrap, setCheckingBootstrap] = useState(true);
+  const [isExistingTokenValid, setIsExistingTokenValid] = useState<boolean | null>(null);
 
   // Check if device is already registered
   const existingToken = localStorage.getItem('admin_device_token');
+
+  // Verify existing token is actually valid
+  useEffect(() => {
+    const verifyExistingToken = async () => {
+      if (!existingToken) {
+        setIsExistingTokenValid(false);
+        return;
+      }
+      
+      try {
+        const apiUrl = getApiUrl();
+        const res = await fetch(`${apiUrl}/auth/check-device`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceToken: existingToken }),
+        });
+        
+        if (res.ok) {
+          setIsExistingTokenValid(true);
+        } else {
+          // Token is invalid - clear it
+          localStorage.removeItem('admin_device_token');
+          setIsExistingTokenValid(false);
+        }
+      } catch (err) {
+        // Network error - clear token to be safe
+        localStorage.removeItem('admin_device_token');
+        setIsExistingTokenValid(false);
+      }
+    };
+    
+    verifyExistingToken();
+  }, [existingToken]);
 
   // Check bootstrap status on mount
   useEffect(() => {
@@ -69,12 +103,13 @@ const AdminSetup = memo(() => {
       }
     };
     
-    if (!existingToken) {
+    // Only check bootstrap if token is invalid or doesn't exist
+    if (isExistingTokenValid === false) {
       checkBootstrap();
-    } else {
+    } else if (isExistingTokenValid === true) {
       setCheckingBootstrap(false);
     }
-  }, [existingToken]);
+  }, [isExistingTokenValid]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +152,16 @@ const AdminSetup = memo(() => {
     }
   }, [code, deviceName, navigate]);
 
-  if (existingToken && !success) {
+  // Show loading while verifying existing token
+  if (isExistingTokenValid === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isExistingTokenValid && !success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
         <motion.div

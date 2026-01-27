@@ -28,30 +28,43 @@ const AdminLogin = memo(() => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deviceToken] = useState(() => localStorage.getItem('admin_device_token'));
+  const [isDeviceValid, setIsDeviceValid] = useState<boolean | null>(null); // null = checking
 
-  // Check if device is registered
-  if (!deviceToken) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
-        <motion.div
-          className="w-full max-w-md"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-              <ShieldX className="w-8 h-8 text-red-600" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Device Not Authorized</h1>
-            <p className="text-gray-500 mb-6">This device is not registered for admin access. Please contact the administrator.</p>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Check if already logged in
+  // Verify device token is actually valid in the database
   useEffect(() => {
+    const verifyDevice = async () => {
+      if (!deviceToken) {
+        setIsDeviceValid(false);
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_URL}/auth/check-device`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceToken }),
+        });
+        
+        if (res.ok) {
+          setIsDeviceValid(true);
+        } else {
+          // Token is invalid - clear it
+          localStorage.removeItem('admin_device_token');
+          setIsDeviceValid(false);
+        }
+      } catch (err) {
+        // Network error - assume invalid for security
+        setIsDeviceValid(false);
+      }
+    };
+    
+    verifyDevice();
+  }, [deviceToken]);
+
+  // Check if already logged in (must be before any conditional returns - React hooks rule)
+  useEffect(() => {
+    if (isDeviceValid !== true) return; // Only check if device is valid
+    
     const token = localStorage.getItem('admin_token');
     if (token) {
       // Verify token is still valid
@@ -61,7 +74,7 @@ const AdminLogin = memo(() => {
         .then((res) => res.ok && navigate('/joy-manage-2024/dashboard', { replace: true }))
         .catch(() => localStorage.removeItem('admin_token'));
     }
-  }, [navigate]);
+  }, [navigate, isDeviceValid]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +97,12 @@ const AdminLogin = memo(() => {
       // Store token and redirect
       localStorage.setItem('admin_token', data.token);
       localStorage.setItem('admin_user', JSON.stringify(data.admin));
+      
+      // SECURITY: Update device token (it's regenerated on each login)
+      if (data.newDeviceToken) {
+        localStorage.setItem('admin_device_token', data.newDeviceToken);
+      }
+      
       navigate('/joy-manage-2024/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -91,6 +110,36 @@ const AdminLogin = memo(() => {
       setIsLoading(false);
     }
   }, [email, password, deviceToken, navigate]);
+
+  // Show loading while checking device
+  if (isDeviceValid === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Device not registered - show error
+  if (!isDeviceValid) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <ShieldX className="w-8 h-8 text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Device Not Authorized</h1>
+            <p className="text-gray-500 mb-6">This device is not registered for admin access. Please contact the administrator.</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-4">

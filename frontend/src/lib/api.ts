@@ -104,3 +104,29 @@ export async function submitContact(contactData: ContactData): Promise<ContactRe
 
   return data as ContactResponse;
 }
+
+// Product interface
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  image_path: string;
+  is_available: number;
+  display_order: number;
+}
+
+// Fetch available products from API
+export async function fetchProducts(): Promise<Product[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/products`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch products');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    throw error;
+  }
+}

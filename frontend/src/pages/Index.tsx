@@ -6,7 +6,7 @@ import ProductCard from "@/components/ProductCard";
 import FloatingShapes from "@/components/FloatingShapes";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
-import { products } from "@/data/products";
+import { useProducts } from "@/components/ProductContext";
 import heroImage from "@/assets/hero-banner.webp";
 
 type Category = "all" | "cookies" | "cupcakes" | "cakepops";
@@ -21,13 +21,14 @@ const categories: { id: Category; label: string }[] = [
 const Index = memo(() => {
   const [activeCategory, setActiveCategory] = useState<Category>("all");
   const { addItem, totalItems, showNotification } = useCart();
+  const { products, getProductById } = useProducts();
 
   const filteredProducts = activeCategory === "all" 
     ? products 
     : products.filter(p => p.category === activeCategory);
 
   const handleAddToCart = useCallback((id: string) => {
-    const product = products.find(p => p.id === id);
+    const product = getProductById(id);
     if (product) {
       addItem({
         id: product.id,
@@ -39,7 +40,7 @@ const Index = memo(() => {
       });
       showNotification(`Added ${product.name} to your order!`);
     }
-  }, [addItem, showNotification]);
+  }, [addItem, showNotification, getProductById]);
 
   return (
     <div className="min-h-screen bg-background">

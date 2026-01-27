@@ -337,16 +337,19 @@ router.post('/login', loginValidation, async (req: Request, res: Response, next:
       throw new AppError('Invalid credentials', 401);
     }
 
-    // Update device last used
-    db.prepare('UPDATE registered_devices SET last_used = datetime(\'now\') WHERE token = ?').run(deviceToken);
+    // SECURITY: Regenerate device token on each login
+    // This invalidates any copied tokens
+    const newDeviceToken = uuidv4();
+    db.prepare('UPDATE registered_devices SET token = ?, last_used = datetime(\'now\') WHERE token = ?')
+      .run(newDeviceToken, deviceToken);
 
-    // Generate JWT token (include deviceToken for revocation checks)
+    // Generate JWT token (include NEW deviceToken for revocation checks)
     const token = jwt.sign(
       {
         id: admin.id,
         email: admin.email,
         name: admin.name,
-        deviceToken: deviceToken,
+        deviceToken: newDeviceToken,
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -357,6 +360,7 @@ router.post('/login', loginValidation, async (req: Request, res: Response, next:
     res.json({
       success: true,
       token,
+      newDeviceToken, // Frontend must update localStorage with this
       admin: {
         id: admin.id,
         email: admin.email,

@@ -28,6 +28,9 @@ import {
   Pencil,
   Monitor,
   ShieldX,
+  UtensilsCrossed,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +49,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
@@ -92,6 +96,24 @@ interface Device {
   created_at: string;
 }
 
+interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  image_path: string;
+  is_available: number;
+  display_order: number;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  display_order: number;
+}
+
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
   confirmed: "bg-blue-100 text-blue-800",
@@ -102,7 +124,7 @@ const statusColors: Record<string, string> = {
 
 const AdminDashboard = memo(() => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"orders" | "messages" | "devices">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "messages" | "devices" | "menu">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -131,6 +153,40 @@ const AdminDashboard = memo(() => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [deviceRevoked, setDeviceRevoked] = useState(false);
+  
+  // Confirmation dialogs
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [deviceToRevoke, setDeviceToRevoke] = useState<number | null>(null);
+  
+  // Menu state
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingMenu, setIsLoadingMenu] = useState(false);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [menuFilter, setMenuFilter] = useState<"all" | "cookies" | "cupcakes" | "cakepops">("all");
+  
+  // Edit item dialog state
+  const [showEditItemDialog, setShowEditItemDialog] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [editItemForm, setEditItemForm] = useState({ name: "", description: "", price: "", category: "", image_path: "" });
+  const [isSavingItem, setIsSavingItem] = useState(false);
+  
+  // Add item dialog state
+  const [showAddItemDialog, setShowAddItemDialog] = useState(false);
+  const [newItemForm, setNewItemForm] = useState({ name: "", description: "", price: "", category: "cookies", image_path: "" });
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  
+  // Add category dialog state
+  const [showAddCategoryDialog, setShowAddCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  
+  // Delete confirmation
+  const [showDeleteItemDialog, setShowDeleteItemDialog] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
 
   const getAuthHeaders = useCallback(() => {
     const token = localStorage.getItem("admin_token");
@@ -239,6 +295,10 @@ const AdminDashboard = memo(() => {
     navigate("/joy-manage-2024", { replace: true });
   }, [navigate]);
 
+  const confirmLogout = useCallback(() => {
+    setShowLogoutDialog(true);
+  }, []);
+
   // Change password handler
   const handleChangePassword = useCallback(async () => {
     setPasswordError("");
@@ -311,6 +371,199 @@ const AdminDashboard = memo(() => {
     }
   }, [getAuthHeaders]);
 
+  // ============================================
+  // MENU MANAGEMENT FUNCTIONS
+  // ============================================
+
+  const fetchMenu = useCallback(async () => {
+    setIsLoadingMenu(true);
+    try {
+      const [productsRes, categoriesRes] = await Promise.all([
+        fetch(`${API_URL}/products/all`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/products/categories`, { headers: getAuthHeaders() })
+      ]);
+      if (productsRes.ok) {
+        const data = await productsRes.json();
+        setMenuItems(data);
+      }
+      if (categoriesRes.ok) {
+        const catData = await categoriesRes.json();
+        setCategories(catData);
+      }
+    } catch (error) {
+      console.error("Error fetching menu:", error);
+    } finally {
+      setIsLoadingMenu(false);
+    }
+  }, [getAuthHeaders]);
+
+  const toggleItemAvailability = useCallback(async (id: string, currentStatus: number) => {
+    try {
+      const res = await fetch(`${API_URL}/products/${id}`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ is_available: currentStatus === 1 ? 0 : 1 }),
+      });
+      if (res.ok) {
+        setMenuItems(prev => prev.map(item => 
+          item.id === id ? { ...item, is_available: currentStatus === 1 ? 0 : 1 } : item
+        ));
+      }
+    } catch (error) {
+      console.error("Error toggling availability:", error);
+    }
+  }, [getAuthHeaders]);
+
+  const updateItemPrice = useCallback(async (id: string) => {
+    const price = parseFloat(editPrice);
+    if (isNaN(price) || price < 0) {
+      alert("Please enter a valid price");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/products/${id}`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ price }),
+      });
+      if (res.ok) {
+        setMenuItems(prev => prev.map(item => 
+          item.id === id ? { ...item, price } : item
+        ));
+        setEditingPriceId(null);
+        setEditPrice("");
+      }
+    } catch (error) {
+      console.error("Error updating price:", error);
+    }
+  }, [getAuthHeaders, editPrice]);
+
+  const saveEditedItem = useCallback(async () => {
+    if (!editingItem) return;
+    setIsSavingItem(true);
+    try {
+      const res = await fetch(`${API_URL}/products/${editingItem.id}`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: editItemForm.name,
+          description: editItemForm.description,
+          price: parseFloat(editItemForm.price),
+          category: editItemForm.category,
+          image_path: editItemForm.image_path,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMenuItems(prev => prev.map(item => 
+          item.id === editingItem.id ? data.product : item
+        ));
+        setShowEditItemDialog(false);
+        setEditingItem(null);
+      }
+    } catch (error) {
+      console.error("Error saving item:", error);
+    } finally {
+      setIsSavingItem(false);
+    }
+  }, [getAuthHeaders, editingItem, editItemForm]);
+
+  const addNewItem = useCallback(async () => {
+    if (!newItemForm.name || !newItemForm.price || !newItemForm.category) {
+      alert("Please fill in name, price, and category");
+      return;
+    }
+    setIsAddingItem(true);
+    try {
+      const res = await fetch(`${API_URL}/products`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: newItemForm.name,
+          description: newItemForm.description,
+          price: parseFloat(newItemForm.price),
+          category: newItemForm.category,
+          image_path: newItemForm.image_path,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMenuItems(prev => [...prev, data.product]);
+        setShowAddItemDialog(false);
+        setNewItemForm({ name: "", description: "", price: "", category: "cookies", image_path: "" });
+      }
+    } catch (error) {
+      console.error("Error adding item:", error);
+    } finally {
+      setIsAddingItem(false);
+    }
+  }, [getAuthHeaders, newItemForm]);
+
+  const deleteItem = useCallback(async () => {
+    if (!itemToDelete) return;
+    setIsDeletingItem(true);
+    try {
+      const res = await fetch(`${API_URL}/products/${itemToDelete.id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setMenuItems(prev => prev.filter(item => item.id !== itemToDelete.id));
+        setShowDeleteItemDialog(false);
+        setItemToDelete(null);
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+    } finally {
+      setIsDeletingItem(false);
+    }
+  }, [getAuthHeaders, itemToDelete]);
+
+  const addNewCategory = useCallback(async () => {
+    if (!newCategoryName) {
+      alert("Please enter a category name");
+      return;
+    }
+    setIsAddingCategory(true);
+    try {
+      const res = await fetch(`${API_URL}/products/categories`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ name: newCategoryName }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(prev => [...prev, data.category]);
+        setShowAddCategoryDialog(false);
+        setNewCategoryName("");
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to create category");
+      }
+    } catch (error) {
+      console.error("Error adding category:", error);
+    } finally {
+      setIsAddingCategory(false);
+    }
+  }, [getAuthHeaders, newCategoryName]);
+
+  const updateCategoryPrice = useCallback(async (category: string, price: number) => {
+    try {
+      const res = await fetch(`${API_URL}/products/category/${category}/price`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ price }),
+      });
+      if (res.ok) {
+        setMenuItems(prev => prev.map(item => 
+          item.category === category ? { ...item, price } : item
+        ));
+      }
+    } catch (error) {
+      console.error("Error updating category price:", error);
+    }
+  }, [getAuthHeaders]);
+
   const generateDeviceCode = useCallback(async () => {
     setIsGeneratingCode(true);
     setGeneratedCode(null);
@@ -339,10 +592,20 @@ const AdminDashboard = memo(() => {
     }
   }, [generatedCode]);
 
-  const deleteDevice = useCallback(async (deviceId: number) => {
-    if (!window.confirm("Are you sure you want to revoke this device's access? They will be logged out immediately.")) return;
+  const initiateRevokeDevice = useCallback((deviceId: number) => {
+    // Check if this is the last device
+    if (devices.length <= 1) {
+      alert("Cannot revoke the last remaining device! You would lose all admin access.");
+      return;
+    }
+    setDeviceToRevoke(deviceId);
+    setShowRevokeDialog(true);
+  }, [devices.length]);
+
+  const deleteDevice = useCallback(async () => {
+    if (!deviceToRevoke) return;
     try {
-      const res = await fetch(`${API_URL}/auth/devices/${deviceId}`, {
+      const res = await fetch(`${API_URL}/auth/devices/${deviceToRevoke}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -352,12 +615,14 @@ const AdminDashboard = memo(() => {
         alert(`Failed to delete device: ${data.error || 'Unknown error'}`);
         return;
       }
+      setShowRevokeDialog(false);
+      setDeviceToRevoke(null);
       fetchDevices();
     } catch (error) {
       console.error("Error deleting device:", error);
       alert("Network error while deleting device");
     }
-  }, [getAuthHeaders, fetchDevices]);
+  }, [getAuthHeaders, fetchDevices, deviceToRevoke]);
 
   const saveDeviceName = useCallback(async (deviceId: number) => {
     try {
@@ -379,6 +644,13 @@ const AdminDashboard = memo(() => {
       fetchDevices();
     }
   }, [activeTab, fetchDevices]);
+
+  // Fetch menu when switching to menu tab
+  useEffect(() => {
+    if (activeTab === "menu") {
+      fetchMenu();
+    }
+  }, [activeTab, fetchMenu]);
 
   const updateOrderStatus = useCallback(
     async (orderId: string, status: string) => {
@@ -546,7 +818,7 @@ const AdminDashboard = memo(() => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleLogout}
+                onClick={confirmLogout}
                 className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
               >
                 <LogOut className="w-4 h-4" />
@@ -765,6 +1037,14 @@ const AdminDashboard = memo(() => {
           >
             <Smartphone className="w-4 h-4" />
             Devices
+          </Button>
+          <Button
+            variant={activeTab === "menu" ? "default" : "outline"}
+            onClick={() => setActiveTab("menu")}
+            className="gap-2"
+          >
+            <UtensilsCrossed className="w-4 h-4" />
+            Menu
           </Button>
         </div>
 
@@ -1073,7 +1353,7 @@ const AdminDashboard = memo(() => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => deleteDevice(device.id)}
+                            onClick={() => initiateRevokeDevice(device.id)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 className="w-4 h-4 mr-1" />
@@ -1088,6 +1368,387 @@ const AdminDashboard = memo(() => {
             </div>
           </div>
         )}
+
+        {/* Menu Tab */}
+        {activeTab === "menu" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Menu Management</h2>
+                <div className="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setShowAddItemDialog(true)}
+                    className="gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Item
+                  </Button>
+                  <Select value={menuFilter} onValueChange={(v) => setMenuFilter(v as typeof menuFilter)}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Filter by category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Items</SelectItem>
+                      <SelectItem value="cookies">Cookies</SelectItem>
+                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                      <SelectItem value="cakepops">Cake Pops</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchMenu}
+                    disabled={isLoadingMenu}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoadingMenu ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </div>
+
+              {isLoadingMenu ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {["cookies", "cupcakes", "cakepops"].map((category) => {
+                    if (menuFilter !== "all" && menuFilter !== category) return null;
+                    const categoryItems = menuItems.filter(item => item.category === category);
+                    if (categoryItems.length === 0 && menuFilter === "all") return null;
+                    
+                    const categoryLabel = category === "cakepops" ? "Cake Pops" : category.charAt(0).toUpperCase() + category.slice(1);
+                    
+                    return (
+                      <div key={category}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="font-semibold text-gray-700 capitalize">{categoryLabel}</h3>
+                          <span className="text-sm text-gray-500">
+                            {categoryItems.filter(i => i.is_available).length}/{categoryItems.length} available
+                          </span>
+                        </div>
+                        <div className="grid gap-3">
+                          {categoryItems.length === 0 ? (
+                            <p className="text-sm text-gray-500 py-4 text-center">No items in this category</p>
+                          ) : categoryItems.map((item) => (
+                            <div
+                              key={item.id}
+                              className={`flex items-center justify-between p-4 rounded-lg border ${
+                                item.is_available ? 'bg-white' : 'bg-gray-50 opacity-75'
+                              }`}
+                            >
+                              <div className="flex items-center gap-4">
+                                <button
+                                  onClick={() => toggleItemAvailability(item.id, item.is_available)}
+                                  className={`transition-colors ${
+                                    item.is_available ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-500'
+                                  }`}
+                                  title={item.is_available ? 'Click to make unavailable' : 'Click to make available'}
+                                >
+                                  {item.is_available ? (
+                                    <ToggleRight className="w-8 h-8" />
+                                  ) : (
+                                    <ToggleLeft className="w-8 h-8" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-medium ${!item.is_available && 'text-gray-500'}`}>
+                                    {item.name}
+                                  </p>
+                                  <p className="text-sm text-gray-500 max-w-md truncate">
+                                    {item.description}
+                                  </p>
+                                  {item.image_path && (
+                                    <p className="text-xs text-gray-400 mt-1 truncate">
+                                      Image: {item.image_path}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {editingPriceId === item.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-500">$</span>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={editPrice}
+                                      onChange={(e) => setEditPrice(e.target.value)}
+                                      className="w-20 h-8"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') updateItemPrice(item.id);
+                                        if (e.key === 'Escape') {
+                                          setEditingPriceId(null);
+                                          setEditPrice("");
+                                        }
+                                      }}
+                                      autoFocus
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-green-600"
+                                      onClick={() => updateItemPrice(item.id)}
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-500"
+                                      onClick={() => {
+                                        setEditingPriceId(null);
+                                        setEditPrice("");
+                                      }}
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setEditingPriceId(item.id);
+                                      setEditPrice(item.price.toFixed(2));
+                                    }}
+                                    className="flex items-center gap-1 text-lg font-semibold text-gray-700 hover:text-primary transition-colors min-w-[70px]"
+                                  >
+                                    ${item.price.toFixed(2)}
+                                  </button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => {
+                                    setEditingItem(item);
+                                    setEditItemForm({
+                                      name: item.name,
+                                      description: item.description,
+                                      price: item.price.toFixed(2),
+                                      category: item.category,
+                                      image_path: item.image_path,
+                                    });
+                                    setShowEditItemDialog(true);
+                                  }}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
+                                  onClick={() => {
+                                    setItemToDelete(item);
+                                    setShowDeleteItemDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Add Item Dialog */}
+        <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                Add New Item
+              </DialogTitle>
+              <DialogDescription>
+                Add a new item to your menu.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-item-name">Name</Label>
+                <Input
+                  id="new-item-name"
+                  value={newItemForm.name}
+                  onChange={(e) => setNewItemForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Item name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-item-description">Description</Label>
+                <Textarea
+                  id="new-item-description"
+                  value={newItemForm.description}
+                  onChange={(e) => setNewItemForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Item description"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-item-price">Price ($)</Label>
+                  <Input
+                    id="new-item-price"
+                    type="number"
+                    step="0.01"
+                    value={newItemForm.price}
+                    onChange={(e) => setNewItemForm(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-item-category">Category</Label>
+                  <Select 
+                    value={newItemForm.category} 
+                    onValueChange={(v) => setNewItemForm(prev => ({ ...prev, category: v }))}
+                  >
+                    <SelectTrigger id="new-item-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cookies">Cookies</SelectItem>
+                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                      <SelectItem value="cakepops">Cake Pops</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-item-image">Image Path</Label>
+                <Input
+                  id="new-item-image"
+                  value={newItemForm.image_path}
+                  onChange={(e) => setNewItemForm(prev => ({ ...prev, image_path: e.target.value }))}
+                  placeholder="e.g., cookies/My Cookie.webp"
+                />
+                <p className="text-xs text-gray-500">Path relative to the assets folder</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddItemDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={addNewItem} disabled={isAddingItem}>
+                {isAddingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Add Item
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Item Dialog */}
+        <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="w-5 h-5" />
+                Edit Item
+              </DialogTitle>
+              <DialogDescription>
+                Update the item details.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-item-name">Name</Label>
+                <Input
+                  id="edit-item-name"
+                  value={editItemForm.name}
+                  onChange={(e) => setEditItemForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Item name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-item-description">Description</Label>
+                <Textarea
+                  id="edit-item-description"
+                  value={editItemForm.description}
+                  onChange={(e) => setEditItemForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Item description"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-price">Price ($)</Label>
+                  <Input
+                    id="edit-item-price"
+                    type="number"
+                    step="0.01"
+                    value={editItemForm.price}
+                    onChange={(e) => setEditItemForm(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-category">Category</Label>
+                  <Select 
+                    value={editItemForm.category} 
+                    onValueChange={(v) => setEditItemForm(prev => ({ ...prev, category: v }))}
+                  >
+                    <SelectTrigger id="edit-item-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cookies">Cookies</SelectItem>
+                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                      <SelectItem value="cakepops">Cake Pops</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-item-image">Image Path</Label>
+                <Input
+                  id="edit-item-image"
+                  value={editItemForm.image_path}
+                  onChange={(e) => setEditItemForm(prev => ({ ...prev, image_path: e.target.value }))}
+                  placeholder="e.g., cookies/My Cookie.webp"
+                />
+                <p className="text-xs text-gray-500">Path relative to the assets folder</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditItemDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveEditedItem} disabled={isSavingItem}>
+                {isSavingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Item Confirmation Dialog */}
+        <Dialog open={showDeleteItemDialog} onOpenChange={setShowDeleteItemDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                Delete Item
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete "{itemToDelete?.name}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowDeleteItemDialog(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={deleteItem} disabled={isDeletingItem}>
+                {isDeletingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Generate Code Dialog */}
         <Dialog open={showGenerateCodeDialog} onOpenChange={setShowGenerateCodeDialog}>
@@ -1155,6 +1816,67 @@ const AdminDashboard = memo(() => {
                   Generate New Code
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Logout Confirmation Dialog */}
+        <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <LogOut className="w-5 h-5 text-red-600" />
+                Confirm Logout
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to log out? You'll need to sign in again to access the dashboard.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setShowLogoutDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  setShowLogoutDialog(false);
+                  handleLogout();
+                }}
+              >
+                Yes, Log Out
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Revoke Device Confirmation Dialog */}
+        <Dialog open={showRevokeDialog} onOpenChange={(open) => {
+          setShowRevokeDialog(open);
+          if (!open) setDeviceToRevoke(null);
+        }}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldX className="w-5 h-5 text-red-600" />
+                Revoke Device Access
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to revoke this device's access? The user will be logged out immediately and won't be able to access the admin panel from that device.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => {
+                setShowRevokeDialog(false);
+                setDeviceToRevoke(null);
+              }}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={deleteDevice}
+              >
+                Yes, Revoke Access
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

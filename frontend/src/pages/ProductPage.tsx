@@ -6,13 +6,14 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
-import { getProductById, getRelatedProducts, getRandomProducts, Product } from "@/data/products";
+import { useProducts, Product } from "@/components/ProductContext";
 import { cn } from "@/lib/utils";
 
 const ProductPage = memo(() => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addItem, totalItems, showNotification } = useCart();
+  const { getProductById, getRelatedProducts, getRandomProducts } = useProducts();
   const [regularQuantity, setRegularQuantity] = useState(1);
   const [showScrollHint, setShowScrollHint] = useState(false);
   const relatedSectionRef = useRef<HTMLElement>(null);
@@ -175,16 +176,6 @@ const ProductPage = memo(() => {
             <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
               {product.description}
             </p>
-
-            {/* Ingredients */}
-            <div className="bg-card rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft">
-              <h3 className="font-display text-base sm:text-lg font-semibold text-foreground mb-2 sm:mb-3">
-                Ingredients
-              </h3>
-              <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
-                {product.ingredients.join(", ")}
-              </p>
-            </div>
 
             {/* Quantity Selector */}
             <div className="space-y-3 sm:space-y-4">

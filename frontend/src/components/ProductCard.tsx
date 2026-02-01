@@ -1,4 +1,4 @@
-import { useState, memo, useCallback } from "react";
+import { useState, memo, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { ShoppingBag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -16,10 +16,28 @@ const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: Pro
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const navigate = useNavigate();
+  const lastAddTime = useRef<number>(0);
 
-  const handleAddToCart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  const handleAddToCart = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
+    
+    console.log('[ProductCard] handleAddToCart called', { 
+      id, 
+      eventType: e.type,
+      timestamp: Date.now(),
+      target: (e.target as HTMLElement).tagName,
+      currentTarget: (e.currentTarget as HTMLElement).tagName,
+    });
+    
+    // Debounce: prevent double-adds within 300ms
+    const now = Date.now();
+    if (now - lastAddTime.current < 300) {
+      console.log('[ProductCard] DEBOUNCED - too soon after last add');
+      return;
+    }
+    lastAddTime.current = now;
+    
     onAddToCart?.(id);
   }, [id, onAddToCart]);
 
@@ -76,7 +94,6 @@ const ProductCard = memo(({ id, name, price, image, category, onAddToCart }: Pro
         <button
           className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-primary text-primary-foreground w-8 h-8 sm:w-10 sm:h-10 !min-h-0 flex items-center justify-center rounded-full shadow-medium touch-manipulation opacity-100 scale-100 md:opacity-0 md:scale-75 md:group-hover:opacity-100 md:group-hover:scale-100 transition-all duration-200 hover:scale-110 active:scale-90"
           onClick={handleAddToCart}
-          onTouchEnd={handleAddToCart}
           aria-label={`Add ${name} to cart`}
         >
           <ShoppingBag className="w-4 h-4" />

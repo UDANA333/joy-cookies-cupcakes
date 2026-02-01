@@ -152,6 +152,7 @@ interface Message {
   email: string;
   message: string;
   is_read: number;
+  replied_at: string | null;
   created_at: string;
 }
 
@@ -286,6 +287,12 @@ const AdminDashboard = memo(() => {
   const [showDeleteItemDialog, setShowDeleteItemDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
+  
+  // Reply to message state
+  const [showReplyDialog, setShowReplyDialog] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [isSendingReply, setIsSendingReply] = useState(false);
   
   // Analytics time period
   const [analyticsPeriod, setAnalyticsPeriod] = useState<"week" | "month" | "year">("month");
@@ -490,7 +497,7 @@ const AdminDashboard = memo(() => {
   }, [orders, menuItems, analyticsPeriod]);
 
   const getAuthHeaders = useCallback(() => {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -515,8 +522,8 @@ const AdminDashboard = memo(() => {
         if (res.status === 403) {
           // Device was actually revoked by an admin
           setDeviceRevoked(true);
-          localStorage.removeItem("admin_token");
-          localStorage.removeItem("admin_user");
+          sessionStorage.removeItem("admin_token");
+          sessionStorage.removeItem("admin_user");
           localStorage.removeItem("admin_device_token");
         }
         // Ignore other errors (500, network issues, etc.) - user stays logged in
@@ -535,8 +542,8 @@ const AdminDashboard = memo(() => {
 
   // Check authentication
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    const user = localStorage.getItem("admin_user");
+    const token = sessionStorage.getItem("admin_token");
+    const user = sessionStorage.getItem("admin_user");
 
     if (!token) {
       navigate("/joy-manage-2024", { replace: true });
@@ -561,8 +568,8 @@ const AdminDashboard = memo(() => {
       if (!ordersRes.ok || !messagesRes.ok || !statsRes.ok) {
         // Handle both 401 (invalid token) and 403 (device revoked)
         if (ordersRes.status === 401 || ordersRes.status === 403) {
-          localStorage.removeItem("admin_token");
-          localStorage.removeItem("admin_user");
+          sessionStorage.removeItem("admin_token");
+          sessionStorage.removeItem("admin_user");
           if (ordersRes.status === 403) {
             localStorage.removeItem("admin_device_token"); // Device was revoked
             alert("Your device access has been revoked. Please contact the administrator.");
@@ -594,8 +601,8 @@ const AdminDashboard = memo(() => {
   }, [fetchData]);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_user");
+    sessionStorage.removeItem("admin_token");
+    sessionStorage.removeItem("admin_user");
     navigate("/joy-manage-2024", { replace: true });
   }, [navigate]);
 
@@ -823,7 +830,7 @@ const AdminDashboard = memo(() => {
       formData.append('image', file);
       formData.append('category', category);
       
-      const token = localStorage.getItem("admin_token");
+      const token = sessionStorage.getItem("admin_token");
       const res = await fetch(`${API_URL}/products/upload`, {
         method: "POST",
         headers: {
@@ -1150,6 +1157,40 @@ const AdminDashboard = memo(() => {
       }
     },
     [getAuthHeaders, fetchData]
+  );
+
+  const sendReply = useCallback(
+    async () => {
+      if (!replyingToMessage || !replyText.trim()) return;
+      
+      setIsSendingReply(true);
+      try {
+        const response = await fetch(`${API_URL}/admin/messages/${replyingToMessage.id}/reply`, {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ reply: replyText.trim() }),
+        });
+        
+        if (!response.ok) {
+          throw new Error("Failed to send reply");
+        }
+        
+        // Close dialog and reset
+        setShowReplyDialog(false);
+        setReplyingToMessage(null);
+        setReplyText("");
+        fetchData();
+      } catch (error) {
+        console.error("Error sending reply:", error);
+        alert("Failed to send reply. Please try again.");
+      } finally {
+        setIsSendingReply(false);
+      }
+    },
+    [replyingToMessage, replyText, getAuthHeaders, fetchData]
   );
 
   const formatDate = (dateStr: string) => {
@@ -1573,6 +1614,12 @@ const AdminDashboard = memo(() => {
                             New
                           </span>
                         )}
+                        {message.replied_at && (
+                          <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            Replied
+                          </span>
+                        )}
                       </div>
                       <a
                         href={`mailto:${message.email}`}
@@ -1594,12 +1641,14 @@ const AdminDashboard = memo(() => {
                     <Button
                       variant="outline"
                       size="sm"
-                      asChild
+                      onClick={() => {
+                        setReplyingToMessage(message);
+                        setReplyText("");
+                        setShowReplyDialog(true);
+                      }}
                     >
-                      <a href={`mailto:${message.email}?subject=Re: Your message to Joy Cookies %26 Cupcakes`}>
-                        <Mail className="w-4 h-4 mr-1" />
-                        Reply
-                      </a>
+                      <Mail className="w-4 h-4 mr-1" />
+                      Reply
                     </Button>
                     {!message.is_read && (
                       <Button
@@ -1958,68 +2007,77 @@ const AdminDashboard = memo(() => {
             {stats && (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <motion.div
-                  className="bg-white rounded-xl p-4 shadow-sm border"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 shadow-sm border border-blue-200"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300 }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Package className="w-5 h-5 text-blue-600" />
-                    </div>
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Total Orders</p>
-                      <p className="text-xl font-bold">{stats.totalOrders}</p>
+                      <p className="text-sm font-medium text-blue-600 mb-1">All-Time Orders</p>
+                      <p className="text-3xl font-black text-blue-900">{stats.totalOrders.toLocaleString()}</p>
+                      <p className="text-xs text-blue-500 mt-1">orders fulfilled 🎉</p>
+                    </div>
+                    <div className="p-3 bg-blue-500 rounded-xl shadow-lg">
+                      <Package className="w-6 h-6 text-white" />
                     </div>
                   </div>
                 </motion.div>
 
                 <motion.div
-                  className="bg-white rounded-xl p-4 shadow-sm border"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 }}
+                  className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-5 shadow-sm border border-green-200"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300, delay: 0.05 }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Total Paid Revenue</p>
-                      <p className="text-xl font-bold">${stats.totalRevenue.toFixed(2)}</p>
+                      <p className="text-sm font-medium text-green-600 mb-1">Total Revenue</p>
+                      <p className="text-3xl font-black text-green-900">${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-green-500 mt-1">lifetime earnings 💰</p>
+                    </div>
+                    <div className="p-3 bg-green-500 rounded-xl shadow-lg">
+                      <DollarSign className="w-6 h-6 text-white" />
                     </div>
                   </div>
                 </motion.div>
 
                 <motion.div
-                  className="bg-white rounded-xl p-4 shadow-sm border"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
+                  className="bg-gradient-to-br from-amber-50 to-yellow-100 rounded-xl p-5 shadow-sm border border-yellow-200"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300, delay: 0.1 }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Clock className="w-5 h-5 text-yellow-600" />
-                    </div>
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Pending Orders</p>
-                      <p className="text-xl font-bold">{stats.pendingOrders}</p>
+                      <p className="text-sm font-medium text-amber-600 mb-1">Pending Orders</p>
+                      <p className="text-3xl font-black text-amber-900">{stats.pendingOrders.toLocaleString()}</p>
+                      <p className="text-xs text-amber-500 mt-1">needs attention ⏳</p>
+                    </div>
+                    <div className="p-3 bg-amber-500 rounded-xl shadow-lg">
+                      <Clock className="w-6 h-6 text-white" />
                     </div>
                   </div>
                 </motion.div>
 
                 <motion.div
-                  className="bg-white rounded-xl p-4 shadow-sm border"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 }}
+                  className="bg-gradient-to-br from-pink-50 to-rose-100 rounded-xl p-5 shadow-sm border border-pink-200"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300, delay: 0.15 }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-pink-100 rounded-lg">
-                      <MessageSquare className="w-5 h-5 text-pink-600" />
-                    </div>
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Unread Messages</p>
-                      <p className="text-xl font-bold">{stats.unreadMessages}</p>
+                      <p className="text-sm font-medium text-pink-600 mb-1">Unread Messages</p>
+                      <p className="text-3xl font-black text-pink-900">{stats.unreadMessages.toLocaleString()}</p>
+                      <p className="text-xs text-pink-500 mt-1">customer inquiries 💬</p>
+                    </div>
+                    <div className="p-3 bg-pink-500 rounded-xl shadow-lg">
+                      <MessageSquare className="w-6 h-6 text-white" />
                     </div>
                   </div>
                 </motion.div>
@@ -2815,7 +2873,7 @@ const AdminDashboard = memo(() => {
                 Device Access Code
               </DialogTitle>
               <DialogDescription>
-                Share this code with someone to register their device. It expires in 24 hours and can only be used once.
+                Share this code with someone to register their device. It expires in 15 minutes and can only be used once.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
@@ -2932,6 +2990,79 @@ const AdminDashboard = memo(() => {
                 onClick={deleteDevice}
               >
                 Yes, Revoke Access
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reply to Message Dialog */}
+        <Dialog open={showReplyDialog} onOpenChange={(open) => {
+          setShowReplyDialog(open);
+          if (!open) {
+            setReplyingToMessage(null);
+            setReplyText("");
+          }
+        }}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-primary" />
+                Reply to Message
+              </DialogTitle>
+              <DialogDescription>
+                Send a reply to {replyingToMessage?.name} ({replyingToMessage?.email})
+              </DialogDescription>
+            </DialogHeader>
+            
+            {replyingToMessage && (
+              <div className="space-y-4">
+                {/* Original message preview */}
+                <div className="bg-gray-50 rounded-lg p-3 border">
+                  <p className="text-xs text-gray-500 mb-1">Original message:</p>
+                  <p className="text-sm text-gray-700 line-clamp-3">{replyingToMessage.message}</p>
+                </div>
+                
+                {/* Reply textarea */}
+                <div className="space-y-2">
+                  <Label htmlFor="reply">Your Reply</Label>
+                  <Textarea
+                    id="reply"
+                    placeholder="Type your reply here..."
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    rows={5}
+                    className="resize-none"
+                  />
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowReplyDialog(false);
+                  setReplyingToMessage(null);
+                  setReplyText("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={sendReply}
+                disabled={!replyText.trim() || isSendingReply}
+              >
+                {isSendingReply ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    Send Reply
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -48,7 +48,7 @@ const AdminSetup = memo(() => {
   const [checkingBootstrap, setCheckingBootstrap] = useState(true);
   const [isExistingTokenValid, setIsExistingTokenValid] = useState<boolean | null>(null);
 
-  // Check if device is already registered
+  // Check if device is already registered (localStorage - persists across sessions)
   const existingToken = localStorage.getItem('admin_device_token');
 
   // Verify existing token is actually valid
@@ -137,7 +137,7 @@ const AdminSetup = memo(() => {
         throw new Error(data.message || 'Registration failed');
       }
 
-      // Store device token
+      // Store device token (localStorage - persists across browser sessions)
       localStorage.setItem('admin_device_token', data.deviceToken);
       setSuccess(true);
 

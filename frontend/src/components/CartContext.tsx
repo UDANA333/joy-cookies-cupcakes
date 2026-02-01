@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useCallback, useEffect,
 
 const NOTIFICATION_DURATION = 3000;
 const CART_STORAGE_KEY = 'joy-cookies-cart';
+const ADD_DEBOUNCE_MS = 300;
 
 export interface CartItem {
   id: string;
@@ -51,6 +52,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   
   // Ref for timeout cleanup
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  // Track last add time per item to debounce rapid adds
+  const lastAddTimeRef = useRef<Map<string, number>>(new Map());
 
   // Persist cart to localStorage
   useEffect(() => {
@@ -77,21 +80,40 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setNotification((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  const addItem = (newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
+  const addItem = useCallback((newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
+    console.log('[CartContext] addItem called', { id: newItem.id, name: newItem.name, timestamp: Date.now() });
+    
+    // Debounce: prevent rapid duplicate adds of the same item
+    const now = Date.now();
+    const lastAdd = lastAddTimeRef.current.get(newItem.id) || 0;
+    if (now - lastAdd < ADD_DEBOUNCE_MS) {
+      console.log('[CartContext] DEBOUNCED - too soon after last add for', newItem.id);
+      return; // Ignore rapid duplicate add
+    }
+    lastAddTimeRef.current.set(newItem.id, now);
+    
+    console.log('[CartContext] Actually adding item to cart', newItem.id);
     setItems((prev) => {
       const existingIndex = prev.findIndex(
         (item) => item.id === newItem.id
       );
       
       if (existingIndex > -1) {
-        const updated = [...prev];
-        updated[existingIndex].quantity += newItem.quantity || 1;
-        return updated;
+        // IMPORTANT: Create a NEW object to avoid mutation!
+        // Don't mutate prev[existingIndex].quantity directly
+        const newQuantity = prev[existingIndex].quantity + (newItem.quantity || 1);
+        console.log('[CartContext] Updated existing item, new quantity:', newQuantity);
+        return prev.map((item, index) => 
+          index === existingIndex 
+            ? { ...item, quantity: newQuantity }
+            : item
+        );
       }
       
+      console.log('[CartContext] Added new item to cart');
       return [...prev, { ...newItem, quantity: newItem.quantity || 1 }];
     });
-  };
+  }, []);
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));

@@ -3,6 +3,7 @@ import { body, query, validationResult } from 'express-validator';
 import db from '../db/database';
 import { AppError } from '../middleware/errorHandler';
 import { authenticateAdmin } from '../middleware/auth';
+import { sendReplyEmail } from '../services/email';
 
 const router = Router();
 
@@ -333,5 +334,52 @@ router.delete('/messages/:id', async (req: Request, res: Response, next: NextFun
     next(error);
   }
 });
+
+// Reply to a message
+router.post(
+  '/messages/:id/reply',
+  body('reply').trim().isLength({ min: 1, max: 5000 }).withMessage('Reply message is required'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new AppError('Reply message is required', 400);
+      }
+
+      const { id } = req.params;
+      const { reply } = req.body;
+
+      const message = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(id) as any;
+
+      if (!message) {
+        throw new AppError('Message not found', 404);
+      }
+
+      // Send reply email
+      const result = await sendReplyEmail({
+        customerName: message.name,
+        customerEmail: message.email,
+        originalMessage: message.message,
+        replyMessage: reply,
+      });
+
+      if (!result.success && !result.dev) {
+        throw new AppError('Failed to send reply email', 500);
+      }
+
+      // Mark message as read and set replied_at after replying
+      db.prepare('UPDATE contact_messages SET is_read = 1, replied_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+
+      console.log(`📧 Reply sent to ${message.email} for message from ${message.name}`);
+
+      res.json({
+        success: true,
+        message: 'Reply sent successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export default router;

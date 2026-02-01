@@ -35,9 +35,79 @@ const weekdayTimeSlots = [
 
 const isWeekend = (dateString: string): boolean => {
   if (!dateString) return true;
-  const date = new Date(dateString);
+  const date = new Date(dateString + 'T12:00:00'); // Use noon to avoid timezone issues
   const day = date.getDay();
   return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+};
+
+// Format a Date object to YYYY-MM-DD in LOCAL timezone (not UTC!)
+// This is important for US users - toISOString() uses UTC which can be a day ahead
+const formatDateForInput = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Check if a date string (YYYY-MM-DD) is today in local timezone
+const isToday = (dateString: string): boolean => {
+  if (!dateString) return false;
+  const today = new Date();
+  return dateString === formatDateForInput(today);
+};
+
+// Parse time slot start time to hours (24h format)
+const parseSlotStartHour = (slot: string): number => {
+  // e.g., "5:00 PM - 6:00 PM" -> 17, "10:00 AM - 11:00 AM" -> 10
+  const match = slot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return 0;
+  let hour = parseInt(match[1], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hour !== 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return hour;
+};
+
+// Get available time slots for a given date, filtering out past slots if it's today
+const getAvailableTimeSlots = (dateString: string): string[] => {
+  if (!dateString) return [];
+  
+  const baseSlots = isWeekend(dateString) ? weekendTimeSlots : weekdayTimeSlots;
+  
+  if (!isToday(dateString)) {
+    return baseSlots; // Return all slots for future dates
+  }
+  
+  // For today, filter out slots that have already passed
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinutes = now.getMinutes();
+  
+  return baseSlots.filter(slot => {
+    const slotStartHour = parseSlotStartHour(slot);
+    
+    // Allow if slot hasn't started yet
+    if (slotStartHour > currentHour) return true;
+    
+    // Grace period: Allow booking up to 10 minutes after slot start time
+    // This gives customers a last chance to order for the current slot
+    if (slotStartHour === currentHour && currentMinutes <= 10) return true;
+    
+    return false;
+  });
+};
+
+// Check if a slot is in "last chance" mode (within 10 minutes of start)
+const isLastChanceSlot = (slot: string, dateString: string): boolean => {
+  if (!isToday(dateString)) return false;
+  
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinutes = now.getMinutes();
+  const slotStartHour = parseSlotStartHour(slot);
+  
+  // It's last chance if slot has already started but within 10 min grace period
+  return slotStartHour === currentHour && currentMinutes <= 10;
 };
 
 // Format phone number to USA format: (XXX) XXX-XXXX
@@ -168,8 +238,8 @@ const Checkout = memo(() => {
     }
   }, []);
 
-  // Get available time slots based on selected date
-  const availableTimeSlots = isWeekend(formData.pickupDate) ? weekendTimeSlots : weekdayTimeSlots;
+  // Get available time slots based on selected date (filters past slots if today)
+  const availableTimeSlots = getAvailableTimeSlots(formData.pickupDate);
 
   const handleTimeChange = useCallback((value: string) => {
     setFormData(prev => ({ ...prev, pickupTime: value }));
@@ -183,10 +253,8 @@ const Checkout = memo(() => {
 
   const isFormValid = formData.email && emailValidation.isValid && formData.pickupDate && formData.pickupTime && items.length > 0;
 
-  // Get minimum date (tomorrow)
-  const minDate = new Date();
-  minDate.setDate(minDate.getDate() + 1);
-  const minDateStr = minDate.toISOString().split("T")[0];
+  // Always allow today as minimum date - time slot filtering handles unavailable times
+  const minDateStr = formatDateForInput(new Date());
 
   return (
     <div className="min-h-screen bg-background">
@@ -531,22 +599,40 @@ const Checkout = memo(() => {
                         <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         Time Slot <span className="text-primary">*</span>
                       </Label>
-                      <Select 
-                        key={formData.pickupDate} 
-                        onValueChange={handleTimeChange}
-                        value={formData.pickupTime}
-                      >
-                        <SelectTrigger className="mt-1.5 touch-manipulation">
-                          <SelectValue placeholder="Select time" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableTimeSlots.map((slot) => (
-                            <SelectItem key={slot} value={slot}>
-                              {slot}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {formData.pickupDate && availableTimeSlots.length === 0 ? (
+                        <div className="mt-1.5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-sm text-amber-800">
+                            No time slots available for this date. Please select a different date.
+                          </p>
+                        </div>
+                      ) : (
+                        <Select 
+                          key={formData.pickupDate} 
+                          onValueChange={handleTimeChange}
+                          value={formData.pickupTime}
+                        >
+                          <SelectTrigger className="mt-1.5 touch-manipulation">
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTimeSlots.map((slot) => {
+                              const isLastChance = isLastChanceSlot(slot, formData.pickupDate);
+                              return (
+                                <SelectItem key={slot} value={slot}>
+                                  {isLastChance ? (
+                                    <span className="flex items-center gap-2">
+                                      {slot}
+                                      <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium animate-pulse">
+                                        ⚡ Last chance!
+                                      </span>
+                                    </span>
+                                  ) : slot}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ const Payment = memo(() => {
   const [error, setError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [isNavigatingToConfirmation, setIsNavigatingToConfirmation] = useState(false);
   
   const { formData } = (location.state as { 
     formData: { 
@@ -33,11 +34,14 @@ const Payment = memo(() => {
   }) || { formData: null };
 
   // Redirect to checkout if accessed directly without form data
+  // But NOT if we just completed an order (cart was cleared intentionally)
   useEffect(() => {
+    if (isNavigatingToConfirmation || orderSuccess) return; // Don't redirect after successful order
+    
     if (!formData || !formData.email || items.length === 0) {
       navigate('/checkout', { replace: true });
     }
-  }, [formData, items.length, navigate]);
+  }, [formData, items.length, navigate, isNavigatingToConfirmation, orderSuccess]);
 
   const handleSubmitOrder = useCallback(async () => {
     if (!formData) return;
@@ -69,6 +73,7 @@ const Payment = memo(() => {
       if (response.success) {
         setOrderNumber(response.orderNumber);
         setOrderSuccess(true);
+        setIsNavigatingToConfirmation(true); // Prevent redirect to checkout
         clearCart();
         
         // Navigate to confirmation after a short delay

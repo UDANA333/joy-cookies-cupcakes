@@ -162,11 +162,11 @@ router.post('/register-device', async (req: Request, res: Response, next: NextFu
 // DEVICE MANAGEMENT ENDPOINTS (require auth)
 // ============================================
 
-// Generate a new one-time device code (24 hour expiry)
+// Generate a new one-time device code (15 minute expiry)
 router.post('/devices/generate-code', authenticateAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const code = generateDeviceCode();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
 
     db.prepare(`
       INSERT INTO device_codes (code, expires_at, created_at)
@@ -179,7 +179,7 @@ router.post('/devices/generate-code', authenticateAdmin, async (req: Request, re
       success: true,
       code,
       expiresAt,
-      expiresIn: '24 hours',
+      expiresIn: '15 minutes',
     });
   } catch (error) {
     next(error);
@@ -360,7 +360,7 @@ router.post('/login', loginValidation, async (req: Request, res: Response, next:
     res.json({
       success: true,
       token,
-      newDeviceToken, // Frontend must update localStorage with this
+      newDeviceToken, // Frontend must update sessionStorage with this
       admin: {
         id: admin.id,
         email: admin.email,

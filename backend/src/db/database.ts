@@ -169,6 +169,18 @@ function runMigrations() {
     console.log('  ✓ Migration: Created device_codes table');
   }
 
+  // Add replied_at column to contact_messages if it doesn't exist
+  const messagesTableInfo = db.prepare("PRAGMA table_info(contact_messages)").all() as Array<{ name: string }>;
+  const messagesColumnNames = messagesTableInfo.map(col => col.name);
+  if (!messagesColumnNames.includes('replied_at')) {
+    try {
+      db.exec("ALTER TABLE contact_messages ADD COLUMN replied_at TEXT");
+      console.log('  ✓ Migration: Added replied_at column to contact_messages');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
   // Seed products if table is empty
   seedProducts();
 }

@@ -320,3 +320,88 @@ export async function sendContactNotification(data: ContactEmailData) {
     return { success: false, error };
   }
 }
+
+// Reply to a contact message
+interface ReplyEmailData {
+  customerName: string;
+  customerEmail: string;
+  originalMessage: string;
+  replyMessage: string;
+}
+
+export async function sendReplyEmail(data: ReplyEmailData) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fdf8f8;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <!-- Header -->
+        <div style="text-align: center; padding: 30px 20px; background: linear-gradient(135deg, #e8a4a4 0%, #f5c6c6 100%); border-radius: 16px 16px 0 0;">
+          <h1 style="margin: 0; color: #4a3333; font-size: 28px;">🍪 Joy Cookies & Cupcakes</h1>
+          <p style="margin: 10px 0 0; color: #6b5555; font-size: 14px;">Fresh-baked treats made with love</p>
+        </div>
+        
+        <!-- Content -->
+        <div style="background: white; padding: 30px; border-radius: 0 0 16px 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+          <p style="color: #6b5555; font-size: 16px; line-height: 1.6;">
+            Hi ${data.customerName || 'there'}!
+          </p>
+          
+          <p style="color: #6b5555; font-size: 16px; line-height: 1.6;">
+            Thank you for reaching out to us. Here's our response to your message:
+          </p>
+          
+          <!-- Reply Message -->
+          <div style="background: #f8f4f0; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <p style="margin: 0; color: #4a3333; font-size: 16px; line-height: 1.8; white-space: pre-wrap;">${data.replyMessage}</p>
+          </div>
+          
+          <!-- Original Message -->
+          <div style="background: #f5f5f5; border-left: 4px solid #e8a4a4; border-radius: 0 8px 8px 0; padding: 15px 20px; margin: 25px 0;">
+            <p style="margin: 0 0 10px; color: #999; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Your original message:</p>
+            <p style="margin: 0; color: #666; font-size: 14px; line-height: 1.6; font-style: italic; white-space: pre-wrap;">${data.originalMessage}</p>
+          </div>
+          
+          <!-- Footer Message -->
+          <p style="color: #6b5555; font-size: 14px; line-height: 1.6; margin: 25px 0 0;">
+            If you have any more questions, feel free to reply to this email!
+          </p>
+          
+          <p style="color: #e8a4a4; font-size: 16px; margin: 25px 0 0; text-align: center;">
+            Thank you for choosing Joy Cookies & Cupcakes! 💕
+          </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} Joy Cookies & Cupcakes. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('📧 [DEV] Gmail not configured. Would send reply to:', data.customerEmail);
+      return { success: true, dev: true };
+    }
+
+    const result = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${BUSINESS_EMAIL}>`,
+      to: data.customerEmail,
+      subject: `Re: Your message to Joy Cookies & Cupcakes`,
+      html,
+    });
+
+    console.log('📧 Reply sent to:', data.customerEmail);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send reply:', error);
+    return { success: false, error };
+  }
+}

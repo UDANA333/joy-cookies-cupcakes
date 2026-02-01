@@ -65,14 +65,14 @@ const AdminLogin = memo(() => {
   useEffect(() => {
     if (isDeviceValid !== true) return; // Only check if device is valid
     
-    const token = localStorage.getItem('admin_token');
+    const token = sessionStorage.getItem('admin_token');
     if (token) {
       // Verify token is still valid
       fetch(`${API_URL}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => res.ok && navigate('/joy-manage-2024/dashboard', { replace: true }))
-        .catch(() => localStorage.removeItem('admin_token'));
+        .catch(() => sessionStorage.removeItem('admin_token'));
     }
   }, [navigate, isDeviceValid]);
 
@@ -94,11 +94,11 @@ const AdminLogin = memo(() => {
         throw new Error(data.message || 'Login failed');
       }
 
-      // Store token and redirect
-      localStorage.setItem('admin_token', data.token);
-      localStorage.setItem('admin_user', JSON.stringify(data.admin));
+      // Store login session (sessionStorage - cleared when browser closes)
+      sessionStorage.setItem('admin_token', data.token);
+      sessionStorage.setItem('admin_user', JSON.stringify(data.admin));
       
-      // SECURITY: Update device token (it's regenerated on each login)
+      // Store device token (localStorage - persists across sessions)
       if (data.newDeviceToken) {
         localStorage.setItem('admin_device_token', data.newDeviceToken);
       }
@@ -176,7 +176,7 @@ const AdminLogin = memo(() => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@joycookiescupcakes.com"
+                placeholder="Enter your email"
                 required
                 autoComplete="email"
               />

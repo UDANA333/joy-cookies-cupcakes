@@ -20,12 +20,20 @@ const Index = memo(() => {
   const { addItem, totalItems, showNotification } = useCart();
   const { products, getProductById } = useProducts();
 
-  // Dynamically get unique categories from products
+  // Dynamically get unique categories from products, sorted by product count (most first)
   const categories = useMemo(() => {
     const uniqueCategories = [...new Set(products.map(p => p.category))];
+    
+    // Sort categories by number of products (descending - most options first)
+    const sortedCategories = uniqueCategories.sort((a, b) => {
+      const countA = products.filter(p => p.category === a).length;
+      const countB = products.filter(p => p.category === b).length;
+      return countB - countA; // Descending order
+    });
+    
     return [
       { id: "all", label: "All Treats" },
-      ...uniqueCategories.map(cat => ({ id: cat, label: formatCategoryName(cat) }))
+      ...sortedCategories.map(cat => ({ id: cat, label: formatCategoryName(cat) }))
     ];
   }, [products]);
 
@@ -34,8 +42,10 @@ const Index = memo(() => {
     : products.filter(p => p.category === activeCategory);
 
   const handleAddToCart = useCallback((id: string) => {
+    console.log('[Index] handleAddToCart called', { id, timestamp: Date.now() });
     const product = getProductById(id);
     if (product) {
+      console.log('[Index] calling addItem for', product.name);
       addItem({
         id: product.id,
         name: product.name,

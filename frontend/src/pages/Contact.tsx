@@ -12,14 +12,14 @@ import { Label } from "@/components/ui/label";
 import { useCart } from "@/components/CartContext";
 import { submitContact } from "@/lib/api";
 
-// Sanitize text input to prevent XSS
+
 const sanitizeInput = (value: string, maxLength: number = 100): string => {
   return value
     .replace(/[<>]/g, '') // Remove angle brackets
     .slice(0, maxLength);
 };
 
-// Email validation
+// Email validation 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 // Common email domain typos and their corrections

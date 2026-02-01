@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,6 +31,12 @@ import {
   UtensilsCrossed,
   ToggleLeft,
   ToggleRight,
+  Upload,
+  ImageIcon,
+  BarChart3,
+  PieChart,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +57,77 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  Legend,
+  Tooltip,
+  Area,
+  AreaChart,
+} from "recharts";
+
+// Product image imports
+import chocolateChipCookie from "@/assets/cookies/Chocolate Chip.webp";
+import sugarCookie from "@/assets/cookies/Sugar Cookie.webp";
+import germanChocolateCookie from "@/assets/cookies/German Chocolate Cookie.webp";
+import doubleChocolateCookie from "@/assets/cookies/Double Chocolate Cookie.webp";
+import biscoffCookie from "@/assets/cookies/Biscoff Cookie.webp";
+import oatmealRaisinCookie from "@/assets/cookies/Oatmeal Raisin Cookie.webp";
+import whiteChocolateMacadamiaCookie from "@/assets/cookies/White Chocolate Macadamia Cookie.webp";
+import peanutButterCookie from "@/assets/cookies/Peanut Butter Cookie.webp";
+import vanillaCupcake from "@/assets/cupcakes/Vanilla Cupcake.webp";
+import chocolateCupcake from "@/assets/cupcakes/Chocolate Cupcake.webp";
+import lemonBlueberryCupcake from "@/assets/cupcakes/Lemon Blueberry Cupcake.webp";
+import cookiesAndCreamCupcake from "@/assets/cupcakes/Cookies and Cream Cupcake.webp";
+import saltedCaramelCupcake from "@/assets/cupcakes/Salted Caramel Cupcake.webp";
+import funfettiCupcake from "@/assets/cupcakes/Funfetti Cupcake.webp";
+import chocolateCakePop from "@/assets/cakepops/Chocolate Cake Pop.webp";
+import vanillaCakePop from "@/assets/cakepops/Vanilla Cake Pop.webp";
+
+// Map image paths to imported images
+const imageMap: Record<string, string> = {
+  'cookies/Chocolate Chip.webp': chocolateChipCookie,
+  'cookies/Sugar Cookie.webp': sugarCookie,
+  'cookies/German Chocolate Cookie.webp': germanChocolateCookie,
+  'cookies/Double Chocolate Cookie.webp': doubleChocolateCookie,
+  'cookies/Biscoff Cookie.webp': biscoffCookie,
+  'cookies/Oatmeal Raisin Cookie.webp': oatmealRaisinCookie,
+  'cookies/White Chocolate Macadamia Cookie.webp': whiteChocolateMacadamiaCookie,
+  'cookies/Peanut Butter Cookie.webp': peanutButterCookie,
+  'cupcakes/Vanilla Cupcake.webp': vanillaCupcake,
+  'cupcakes/Chocolate Cupcake.webp': chocolateCupcake,
+  'cupcakes/Lemon Blueberry Cupcake.webp': lemonBlueberryCupcake,
+  'cupcakes/Cookies and Cream Cupcake.webp': cookiesAndCreamCupcake,
+  'cupcakes/Salted Caramel Cupcake.webp': saltedCaramelCupcake,
+  'cupcakes/Funfetti Cupcake.webp': funfettiCupcake,
+  'cakepops/Chocolate Cake Pop.webp': chocolateCakePop,
+  'cakepops/Vanilla Cake Pop.webp': vanillaCakePop,
+};
+
+// Helper to get image URL from image_path
+function getImageUrl(imagePath: string): string | null {
+  if (!imagePath) return null;
+  // Check if it's a bundled asset
+  if (imageMap[imagePath]) return imageMap[imagePath];
+  // Check if it's an uploaded image
+  if (imagePath.startsWith('uploads/')) return `/${imagePath}`;
+  return null;
+}
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
@@ -62,7 +139,7 @@ interface Order {
   customer_phone: string;
   pickup_date: string;
   pickup_time: string;
-  items: { id: string; name: string; price: number; quantity: number }[];
+  items: { id: string; name: string; price: number; quantity: number; category?: string }[];
   total: number;
   order_status: string;
   payment_status: string;
@@ -122,9 +199,21 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800",
 };
 
+// Chart colors
+const CHART_COLORS = [
+  "#f472b6", // pink-400
+  "#fb923c", // orange-400
+  "#a78bfa", // violet-400
+  "#4ade80", // green-400
+  "#60a5fa", // blue-400
+  "#f87171", // red-400
+  "#facc15", // yellow-400
+  "#2dd4bf", // teal-400
+];
+
 const AdminDashboard = memo(() => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"orders" | "messages" | "devices" | "menu">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "messages" | "devices" | "menu" | "analytics">("analytics");
   const [orders, setOrders] = useState<Order[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -165,7 +254,7 @@ const AdminDashboard = memo(() => {
   const [isLoadingMenu, setIsLoadingMenu] = useState(false);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState("");
-  const [menuFilter, setMenuFilter] = useState<"all" | "cookies" | "cupcakes" | "cakepops">("all");
+  const [menuFilter, setMenuFilter] = useState<string>("all");
   
   // Edit item dialog state
   const [showEditItemDialog, setShowEditItemDialog] = useState(false);
@@ -177,6 +266,16 @@ const AdminDashboard = memo(() => {
   const [showAddItemDialog, setShowAddItemDialog] = useState(false);
   const [newItemForm, setNewItemForm] = useState({ name: "", description: "", price: "", category: "cookies", image_path: "" });
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState("");
+  
+  // Edit item image upload state
+  const [isUploadingEditImage, setIsUploadingEditImage] = useState(false);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const [isDraggingEdit, setIsDraggingEdit] = useState(false);
   
   // Add category dialog state
   const [showAddCategoryDialog, setShowAddCategoryDialog] = useState(false);
@@ -187,6 +286,208 @@ const AdminDashboard = memo(() => {
   const [showDeleteItemDialog, setShowDeleteItemDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
+  
+  // Analytics time period
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<"week" | "month" | "year">("month");
+
+  // Analytics data calculations
+  const analyticsData = useMemo(() => {
+    if (!orders.length) return null;
+
+    const now = new Date();
+    const getStartDate = () => {
+      const date = new Date();
+      if (analyticsPeriod === "week") date.setDate(date.getDate() - 7);
+      else if (analyticsPeriod === "month") date.setMonth(date.getMonth() - 1);
+      else date.setFullYear(date.getFullYear() - 1);
+      return date;
+    };
+    
+    const startDate = getStartDate();
+    const filteredOrders = orders.filter(o => new Date(o.created_at) >= startDate);
+    const paidFilteredOrders = filteredOrders.filter(o => o.payment_status === "paid");
+    
+    // Generate calendar-based timeline
+    const generateTimelineKeys = () => {
+      const keys: { key: string; sortKey: number }[] = [];
+      const current = new Date(startDate);
+      const end = new Date(now);
+      
+      if (analyticsPeriod === "week") {
+        // Daily for week view
+        while (current <= end) {
+          keys.push({
+            key: current.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+            sortKey: current.getTime(),
+          });
+          current.setDate(current.getDate() + 1);
+        }
+      } else if (analyticsPeriod === "month") {
+        // Daily for month view
+        while (current <= end) {
+          keys.push({
+            key: current.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            sortKey: current.getTime(),
+          });
+          current.setDate(current.getDate() + 1);
+        }
+      } else {
+        // Monthly for year view
+        current.setDate(1); // Start from first of month
+        while (current <= end) {
+          keys.push({
+            key: current.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+            sortKey: current.getTime(),
+          });
+          current.setMonth(current.getMonth() + 1);
+        }
+      }
+      return keys;
+    };
+    
+    const timelineKeys = generateTimelineKeys();
+    
+    // Initialize all timeline slots with zeros
+    const revenueByDate: Record<string, { revenue: number; orders: number; sortKey: number }> = {};
+    timelineKeys.forEach(({ key, sortKey }) => {
+      revenueByDate[key] = { revenue: 0, orders: 0, sortKey };
+    });
+    
+    // Fill in actual order data
+    filteredOrders.forEach(order => {
+      const date = new Date(order.created_at);
+      let key: string;
+      if (analyticsPeriod === "week") {
+        key = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      } else if (analyticsPeriod === "month") {
+        key = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else {
+        key = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+      
+      if (!revenueByDate[key]) {
+        revenueByDate[key] = { revenue: 0, orders: 0, sortKey: date.getTime() };
+      }
+      
+      // Only count paid orders for revenue
+      if (order.payment_status === "paid") {
+        revenueByDate[key].revenue += order.total;
+      }
+      revenueByDate[key].orders += 1;
+    });
+
+    // Sort chart data chronologically using the stored timestamp
+    const revenueChartData = Object.entries(revenueByDate)
+      .map(([date, data]) => ({
+        date,
+        revenue: Number(data.revenue.toFixed(2)),
+        orders: data.orders,
+        sortKey: data.sortKey,
+      }))
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ date, revenue, orders }) => ({ date, revenue, orders }));
+
+    // Order status breakdown
+    const statusCounts: Record<string, number> = {};
+    filteredOrders.forEach(order => {
+      statusCounts[order.order_status] = (statusCounts[order.order_status] || 0) + 1;
+    });
+    const statusChartData = Object.entries(statusCounts).map(([status, count]) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1),
+      value: count,
+    }));
+
+    // Top selling products (only from paid orders)
+    const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    paidFilteredOrders.forEach(order => {
+      order.items.forEach(item => {
+        if (!productSales[item.id]) {
+          productSales[item.id] = { name: item.name, quantity: 0, revenue: 0 };
+        }
+        productSales[item.id].quantity += item.quantity;
+        productSales[item.id].revenue += item.price * item.quantity;
+      });
+    });
+    const topProducts = Object.values(productSales)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 8);
+
+    // Category performance (only from paid orders)
+    // Use category from order items directly, fall back to menu lookup, then "other"
+    const categoryRevenue: Record<string, number> = {};
+    paidFilteredOrders.forEach(order => {
+      order.items.forEach(item => {
+        // First try to get category from the order item itself
+        let category = item.category;
+        // If not in order, try to find from menu items
+        if (!category) {
+          const menuItem = menuItems.find(m => m.id === item.id);
+          category = menuItem?.category;
+        }
+        // Default to "other" if still not found
+        category = category || "other";
+        categoryRevenue[category] = (categoryRevenue[category] || 0) + item.price * item.quantity;
+      });
+    });
+    const categoryChartData = Object.entries(categoryRevenue).map(([category, revenue]) => ({
+      name: category.charAt(0).toUpperCase() + category.slice(1),
+      revenue: Number(revenue.toFixed(2)),
+    }));
+
+    // Period comparison
+    const prevStartDate = new Date(startDate);
+    if (analyticsPeriod === "week") prevStartDate.setDate(prevStartDate.getDate() - 7);
+    else if (analyticsPeriod === "month") prevStartDate.setMonth(prevStartDate.getMonth() - 1);
+    else prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
+    
+    const prevOrders = orders.filter(o => {
+      const date = new Date(o.created_at);
+      return date >= prevStartDate && date < startDate;
+    });
+    const paidPrevOrders = prevOrders.filter(o => o.payment_status === "paid");
+
+    const currentRevenue = paidFilteredOrders.reduce((sum, o) => sum + o.total, 0);
+    const prevRevenue = paidPrevOrders.reduce((sum, o) => sum + o.total, 0);
+    // If previous revenue was 0 but current > 0, show 100% increase. If both 0, show 0%
+    const revenueChange = prevRevenue > 0 
+      ? ((currentRevenue - prevRevenue) / prevRevenue) * 100 
+      : (currentRevenue > 0 ? 100 : 0);
+    
+    const currentOrderCount = filteredOrders.length;
+    const prevOrderCount = prevOrders.length;
+    // If previous orders was 0 but current > 0, show 100% increase
+    const orderChange = prevOrderCount > 0 
+      ? ((currentOrderCount - prevOrderCount) / prevOrderCount) * 100 
+      : (currentOrderCount > 0 ? 100 : 0);
+
+    const paidOrderCount = paidFilteredOrders.length;
+    const paidPrevOrderCount = paidPrevOrders.length;
+    const avgOrderValue = paidOrderCount > 0 ? currentRevenue / paidOrderCount : 0;
+    const prevAvgOrderValue = paidPrevOrderCount > 0 ? prevRevenue / paidPrevOrderCount : 0;
+    // If previous avg was 0 but current > 0, show 100% increase
+    const avgOrderChange = prevAvgOrderValue > 0 
+      ? ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100 
+      : (avgOrderValue > 0 ? 100 : 0);
+
+    // Payment status - count anything not "paid" as unpaid
+    const paidOrders = filteredOrders.filter(o => o.payment_status === "paid").length;
+    const unpaidOrders = filteredOrders.filter(o => o.payment_status !== "paid").length;
+
+    return {
+      revenueChartData,
+      statusChartData,
+      topProducts,
+      categoryChartData,
+      currentRevenue,
+      revenueChange,
+      currentOrderCount,
+      orderChange,
+      avgOrderValue,
+      avgOrderChange,
+      paidOrders,
+      unpaidOrders,
+    };
+  }, [orders, menuItems, analyticsPeriod]);
 
   const getAuthHeaders = useCallback(() => {
     const token = localStorage.getItem("admin_token");
@@ -196,7 +497,7 @@ const AdminDashboard = memo(() => {
     };
   }, []);
 
-  // Check if device is still valid (poll every 5 seconds)
+  // Check if device is still valid (poll every 30 seconds)
   useEffect(() => {
     const checkDeviceValidity = async () => {
       const deviceToken = localStorage.getItem("admin_device_token");
@@ -209,22 +510,25 @@ const AdminDashboard = memo(() => {
           body: JSON.stringify({ deviceToken }),
         });
         
-        if (!res.ok) {
-          // Device was revoked!
+        // Only revoke on explicit 403 (device actually revoked by admin)
+        // Don't revoke on network errors, server down, etc.
+        if (res.status === 403) {
+          // Device was actually revoked by an admin
           setDeviceRevoked(true);
           localStorage.removeItem("admin_token");
           localStorage.removeItem("admin_user");
           localStorage.removeItem("admin_device_token");
         }
+        // Ignore other errors (500, network issues, etc.) - user stays logged in
       } catch (error) {
-        // Network error, don't logout
-        console.error("Device check failed:", error);
+        // Network error, don't logout - server might just be temporarily unavailable
+        console.error("Device check failed (network):", error);
       }
     };
 
-    // Check immediately and then every 5 seconds
+    // Check immediately and then every 30 seconds (reduced frequency)
     checkDeviceValidity();
-    const interval = setInterval(checkDeviceValidity, 5000);
+    const interval = setInterval(checkDeviceValidity, 30000);
     
     return () => clearInterval(interval);
   }, []);
@@ -491,6 +795,7 @@ const AdminDashboard = memo(() => {
         setMenuItems(prev => [...prev, data.product]);
         setShowAddItemDialog(false);
         setNewItemForm({ name: "", description: "", price: "", category: "cookies", image_path: "" });
+        setUploadedImagePreview(null);
       }
     } catch (error) {
       console.error("Error adding item:", error);
@@ -498,6 +803,82 @@ const AdminDashboard = memo(() => {
       setIsAddingItem(false);
     }
   }, [getAuthHeaders, newItemForm]);
+
+  // Image upload handler for new item
+  const handleImageUpload = useCallback(async (file: File, isEdit: boolean = false) => {
+    const category = isEdit ? editItemForm.category : newItemForm.category;
+    if (!category) {
+      alert("Please select a category first");
+      return;
+    }
+    
+    if (isEdit) {
+      setIsUploadingEditImage(true);
+    } else {
+      setIsUploadingImage(true);
+    }
+    
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('category', category);
+      
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch(`${API_URL}/products/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (isEdit) {
+          setEditItemForm(prev => ({ ...prev, image_path: data.image_path }));
+          setEditImagePreview(URL.createObjectURL(file));
+        } else {
+          setNewItemForm(prev => ({ ...prev, image_path: data.image_path }));
+          setUploadedImagePreview(URL.createObjectURL(file));
+        }
+      } else {
+        const error = await res.json();
+        alert(error.error || "Failed to upload image");
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      alert("Failed to upload image");
+    } finally {
+      if (isEdit) {
+        setIsUploadingEditImage(false);
+      } else {
+        setIsUploadingImage(false);
+      }
+    }
+  }, [newItemForm.category, editItemForm.category]);
+
+  // Handle file drop
+  const handleDrop = useCallback((e: React.DragEvent, isEdit: boolean = false) => {
+    e.preventDefault();
+    if (isEdit) {
+      setIsDraggingEdit(false);
+    } else {
+      setIsDragging(false);
+    }
+    
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      handleImageUpload(file, isEdit);
+    }
+  }, [handleImageUpload]);
+
+  // Handle file input change
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImageUpload(file, isEdit);
+    }
+  }, [handleImageUpload]);
 
   const deleteItem = useCallback(async () => {
     if (!itemToDelete) return;
@@ -546,6 +927,45 @@ const AdminDashboard = memo(() => {
       setIsAddingCategory(false);
     }
   }, [getAuthHeaders, newCategoryName]);
+
+  // Create category inline (from Add/Edit item dialog)
+  const createCategoryInline = useCallback(async (categoryName: string, forEdit: boolean = false) => {
+    if (!categoryName.trim()) {
+      alert("Please enter a category name");
+      return;
+    }
+    
+    // Generate slug from name
+    const slug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+    
+    setIsAddingCategory(true);
+    try {
+      const res = await fetch(`${API_URL}/products/categories`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ name: categoryName, slug }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(prev => [...prev, data.category]);
+        // Set the new category as selected
+        if (forEdit) {
+          setEditItemForm(prev => ({ ...prev, category: data.category.slug }));
+        } else {
+          setNewItemForm(prev => ({ ...prev, category: data.category.slug }));
+        }
+        setNewCategoryInput("");
+        setShowNewCategoryInput(false);
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to create category");
+      }
+    } catch (error) {
+      console.error("Error creating category:", error);
+    } finally {
+      setIsAddingCategory(false);
+    }
+  }, [getAuthHeaders]);
 
   const updateCategoryPrice = useCallback(async (category: string, price: number) => {
     try {
@@ -938,115 +1358,61 @@ const AdminDashboard = memo(() => {
       </Dialog>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <motion.div
-              className="bg-white rounded-xl p-5 shadow-sm border"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Package className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Orders</p>
-                  <p className="text-2xl font-bold">{stats.totalOrders}</p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="bg-white rounded-xl p-5 shadow-sm border"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <DollarSign className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Revenue</p>
-                  <p className="text-2xl font-bold">
-                    ${stats.totalRevenue.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="bg-white rounded-xl p-5 shadow-sm border"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Clock className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Pending</p>
-                  <p className="text-2xl font-bold">{stats.pendingOrders}</p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="bg-white rounded-xl p-5 shadow-sm border"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-pink-100 rounded-lg">
-                  <MessageSquare className="w-5 h-5 text-pink-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Unread Messages</p>
-                  <p className="text-2xl font-bold">{stats.unreadMessages}</p>
-                </div>
-              </div>
-            </motion.div>
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left Sidebar - Navigation */}
+          <div className="lg:w-56 flex-shrink-0">
+            <div className="lg:sticky lg:top-8">
+              <nav className="flex lg:flex-col gap-2">
+                <Button
+                  variant={activeTab === "analytics" ? "default" : "ghost"}
+                  onClick={() => setActiveTab("analytics")}
+                  className="justify-start gap-3 w-full"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span className="hidden lg:inline">Analytics</span>
+                </Button>
+                <Button
+                  variant={activeTab === "orders" ? "default" : "ghost"}
+                  onClick={() => setActiveTab("orders")}
+                  className="justify-start gap-3 w-full"
+                >
+                  <Package className="w-4 h-4" />
+                  <span className="hidden lg:inline">Orders</span>
+                  <span className="ml-auto bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full">{orders.length}</span>
+                </Button>
+                <Button
+                  variant={activeTab === "messages" ? "default" : "ghost"}
+                  onClick={() => setActiveTab("messages")}
+                  className="justify-start gap-3 w-full"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="hidden lg:inline">Messages</span>
+                  {stats && stats.unreadMessages > 0 && (
+                    <span className="ml-auto bg-pink-500 text-white text-xs px-2 py-0.5 rounded-full">{stats.unreadMessages}</span>
+                  )}
+                </Button>
+                <Button
+                  variant={activeTab === "devices" ? "default" : "ghost"}
+                  onClick={() => setActiveTab("devices")}
+                  className="justify-start gap-3 w-full"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span className="hidden lg:inline">Devices</span>
+                </Button>
+                <Button
+                  variant={activeTab === "menu" ? "default" : "ghost"}
+                  onClick={() => setActiveTab("menu")}
+                  className="justify-start gap-3 w-full"
+                >
+                  <UtensilsCrossed className="w-4 h-4" />
+                  <span className="hidden lg:inline">Menu</span>
+                </Button>
+              </nav>
+            </div>
           </div>
-        )}
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 flex-wrap">
-          <Button
-            variant={activeTab === "orders" ? "default" : "outline"}
-            onClick={() => setActiveTab("orders")}
-            className="gap-2"
-          >
-            <Package className="w-4 h-4" />
-            Orders ({orders.length})
-          </Button>
-          <Button
-            variant={activeTab === "messages" ? "default" : "outline"}
-            onClick={() => setActiveTab("messages")}
-            className="gap-2"
-          >
-            <MessageSquare className="w-4 h-4" />
-            Messages ({messages.length})
-          </Button>
-          <Button
-            variant={activeTab === "devices" ? "default" : "outline"}
-            onClick={() => setActiveTab("devices")}
-            className="gap-2"
-          >
-            <Smartphone className="w-4 h-4" />
-            Devices
-          </Button>
-          <Button
-            variant={activeTab === "menu" ? "default" : "outline"}
-            onClick={() => setActiveTab("menu")}
-            className="gap-2"
-          >
-            <UtensilsCrossed className="w-4 h-4" />
-            Menu
-          </Button>
-        </div>
+          {/* Main Content */}
+          <div className="flex-1 min-w-0">
 
         {/* Orders Tab */}
         {activeTab === "orders" && (
@@ -1385,15 +1751,22 @@ const AdminDashboard = memo(() => {
                     <Plus className="w-4 h-4" />
                     Add Item
                   </Button>
-                  <Select value={menuFilter} onValueChange={(v) => setMenuFilter(v as typeof menuFilter)}>
+                  <Select value={menuFilter} onValueChange={(v) => setMenuFilter(v)}>
                     <SelectTrigger className="w-[150px]">
                       <SelectValue placeholder="Filter by category" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Items</SelectItem>
-                      <SelectItem value="cookies">Cookies</SelectItem>
-                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
-                      <SelectItem value="cakepops">Cake Pops</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.slug}>{cat.name}</SelectItem>
+                      ))}
+                      {categories.length === 0 && (
+                        <>
+                          <SelectItem value="cookies">Cookies</SelectItem>
+                          <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                          <SelectItem value="cakepops">Cake Pops</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                   <Button
@@ -1413,35 +1786,44 @@ const AdminDashboard = memo(() => {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {["cookies", "cupcakes", "cakepops"].map((category) => {
-                    if (menuFilter !== "all" && menuFilter !== category) return null;
-                    const categoryItems = menuItems.filter(item => item.category === category);
-                    if (categoryItems.length === 0 && menuFilter === "all") return null;
+                  {/* Get unique categories from menu items or use loaded categories */}
+                  {(() => {
+                    const categoryList = categories.length > 0 
+                      ? categories.map(c => c.slug) 
+                      : [...new Set(menuItems.map(item => item.category))];
                     
-                    const categoryLabel = category === "cakepops" ? "Cake Pops" : category.charAt(0).toUpperCase() + category.slice(1);
-                    
-                    return (
-                      <div key={category}>
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold text-gray-700 capitalize">{categoryLabel}</h3>
-                          <span className="text-sm text-gray-500">
-                            {categoryItems.filter(i => i.is_available).length}/{categoryItems.length} available
-                          </span>
-                        </div>
-                        <div className="grid gap-3">
-                          {categoryItems.length === 0 ? (
-                            <p className="text-sm text-gray-500 py-4 text-center">No items in this category</p>
-                          ) : categoryItems.map((item) => (
-                            <div
-                              key={item.id}
-                              className={`flex items-center justify-between p-4 rounded-lg border ${
-                                item.is_available ? 'bg-white' : 'bg-gray-50 opacity-75'
-                              }`}
-                            >
-                              <div className="flex items-center gap-4">
-                                <button
-                                  onClick={() => toggleItemAvailability(item.id, item.is_available)}
-                                  className={`transition-colors ${
+                    return categoryList.map((categorySlug) => {
+                      if (menuFilter !== "all" && menuFilter !== categorySlug) return null;
+                      const categoryItems = menuItems.filter(item => item.category === categorySlug);
+                      if (categoryItems.length === 0 && menuFilter === "all") return null;
+                      
+                      // Get category name from categories array or format slug
+                      const categoryObj = categories.find(c => c.slug === categorySlug);
+                      const categoryLabel = categoryObj?.name || 
+                        (categorySlug === "cakepops" ? "Cake Pops" : categorySlug.charAt(0).toUpperCase() + categorySlug.slice(1));
+                      
+                      return (
+                        <div key={categorySlug}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-gray-700">{categoryLabel}</h3>
+                            <span className="text-sm text-gray-500">
+                              {categoryItems.filter(i => i.is_available).length}/{categoryItems.length} available
+                            </span>
+                          </div>
+                          <div className="grid gap-3">
+                            {categoryItems.length === 0 ? (
+                              <p className="text-sm text-gray-500 py-4 text-center">No items in this category</p>
+                            ) : categoryItems.map((item) => (
+                              <div
+                                key={item.id}
+                                className={`flex items-center justify-between p-4 rounded-lg border ${
+                                  item.is_available ? 'bg-white' : 'bg-gray-50 opacity-75'
+                                }`}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <button
+                                    onClick={() => toggleItemAvailability(item.id, item.is_available)}
+                                    className={`transition-colors ${
                                     item.is_available ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-500'
                                   }`}
                                   title={item.is_available ? 'Click to make unavailable' : 'Click to make available'}
@@ -1452,6 +1834,20 @@ const AdminDashboard = memo(() => {
                                     <ToggleLeft className="w-8 h-8" />
                                   )}
                                 </button>
+                                {/* Product Image Thumbnail */}
+                                <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                  {getImageUrl(item.image_path) ? (
+                                    <img
+                                      src={getImageUrl(item.image_path)!}
+                                      alt={item.name}
+                                      className={`w-full h-full object-cover ${!item.is_available && 'opacity-50'}`}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                      <UtensilsCrossed className="w-6 h-6" />
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className={`font-medium ${!item.is_available && 'text-gray-500'}`}>
                                     {item.name}
@@ -1459,11 +1855,6 @@ const AdminDashboard = memo(() => {
                                   <p className="text-sm text-gray-500 max-w-md truncate">
                                     {item.description}
                                   </p>
-                                  {item.image_path && (
-                                    <p className="text-xs text-gray-400 mt-1 truncate">
-                                      Image: {item.image_path}
-                                    </p>
-                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -1529,6 +1920,7 @@ const AdminDashboard = memo(() => {
                                       category: item.category,
                                       image_path: item.image_path,
                                     });
+                                    setEditImagePreview(null);
                                     setShowEditItemDialog(true);
                                   }}
                                 >
@@ -1551,10 +1943,413 @@ const AdminDashboard = memo(() => {
                         </div>
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === "analytics" && (
+          <div className="space-y-6">
+            {/* Overview Stats - Always visible */}
+            {stats && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <motion.div
+                  className="bg-white rounded-xl p-4 shadow-sm border"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Package className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Total Orders</p>
+                      <p className="text-xl font-bold">{stats.totalOrders}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  className="bg-white rounded-xl p-4 shadow-sm border"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Total Paid Revenue</p>
+                      <p className="text-xl font-bold">${stats.totalRevenue.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  className="bg-white rounded-xl p-4 shadow-sm border"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <Clock className="w-5 h-5 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Pending Orders</p>
+                      <p className="text-xl font-bold">{stats.pendingOrders}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  className="bg-white rounded-xl p-4 shadow-sm border"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-pink-100 rounded-lg">
+                      <MessageSquare className="w-5 h-5 text-pink-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Unread Messages</p>
+                      <p className="text-xl font-bold">{stats.unreadMessages}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+
+            {/* Period Selector */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">Period Analytics</h2>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={analyticsPeriod === "week" ? "default" : "outline"}
+                  onClick={() => setAnalyticsPeriod("week")}
+                >
+                  Week
+                </Button>
+                <Button
+                  size="sm"
+                  variant={analyticsPeriod === "month" ? "default" : "outline"}
+                  onClick={() => setAnalyticsPeriod("month")}
+                >
+                  Month
+                </Button>
+                <Button
+                  size="sm"
+                  variant={analyticsPeriod === "year" ? "default" : "outline"}
+                  onClick={() => setAnalyticsPeriod("year")}
+                >
+                  Year
+                </Button>
+              </div>
+            </div>
+
+            {!analyticsData ? (
+              <div className="bg-white rounded-xl p-8 text-center text-gray-500">
+                No order data available for analytics
+              </div>
+            ) : (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">Paid Revenue</p>
+                        <p className="text-2xl font-bold">${analyticsData.currentRevenue.toFixed(2)}</p>
+                      </div>
+                      <div className={`flex items-center gap-1 text-sm ${analyticsData.revenueChange >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {analyticsData.revenueChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                        {Math.abs(analyticsData.revenueChange).toFixed(1)}%
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">Period Orders</p>
+                        <p className="text-2xl font-bold">{analyticsData.currentOrderCount}</p>
+                      </div>
+                      <div className={`flex items-center gap-1 text-sm ${analyticsData.orderChange >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {analyticsData.orderChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                        {Math.abs(analyticsData.orderChange).toFixed(1)}%
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">Avg Order Value</p>
+                        <p className="text-2xl font-bold">${analyticsData.avgOrderValue.toFixed(2)}</p>
+                      </div>
+                      <div className={`flex items-center gap-1 text-sm ${analyticsData.avgOrderChange >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {analyticsData.avgOrderChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                        {Math.abs(analyticsData.avgOrderChange).toFixed(1)}%
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">Payment Rate</p>
+                        <p className="text-2xl font-bold">
+                          {analyticsData.paidOrders + analyticsData.unpaidOrders > 0
+                            ? ((analyticsData.paidOrders / (analyticsData.paidOrders + analyticsData.unpaidOrders)) * 100).toFixed(0)
+                            : 0}%
+                        </p>
+                      </div>
+                      <div className="flex gap-2 text-xs">
+                        <span className="text-green-600">{analyticsData.paidOrders} paid</span>
+                        <span className="text-yellow-600">{analyticsData.unpaidOrders} unpaid</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Charts Row 1 */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Revenue Over Time */}
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-pink-500" />
+                      Paid Revenue Over Time
+                    </h3>
+                    <div className="h-64">
+                      {analyticsData.revenueChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={analyticsData.revenueChartData}>
+                            <defs>
+                              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#f472b6" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#f472b6" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                            <Tooltip
+                              formatter={(value: number) => [`$${value.toFixed(2)}`, "Revenue"]}
+                              contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#f472b6"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#colorRevenue)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400">
+                          No data for this period
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* Orders Over Time */}
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Package className="w-5 h-5 text-blue-500" />
+                      Orders Over Time
+                    </h3>
+                    <div className="h-64">
+                      {analyticsData.revenueChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analyticsData.revenueChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                            <Tooltip
+                              formatter={(value: number) => [value, "Orders"]}
+                              contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                            />
+                            <Bar dataKey="orders" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400">
+                          No data for this period
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Charts Row 2 */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Order Status Breakdown */}
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                  >
+                    <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <PieChart className="w-5 h-5 text-violet-500" />
+                      Order Status Breakdown
+                    </h3>
+                    <div className="h-64">
+                      {analyticsData.statusChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={analyticsData.statusChartData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={5}
+                              dataKey="value"
+                            >
+                              {analyticsData.statusChartData.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: number, name: string) => [value, name]}
+                              contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                            />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400">
+                          No data for this period
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* Category Performance */}
+                  <motion.div
+                    className="bg-white rounded-xl p-5 shadow-sm border"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 }}
+                  >
+                    <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-orange-500" />
+                      Revenue by Category
+                    </h3>
+                    <div className="h-64">
+                      {analyticsData.categoryChartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analyticsData.categoryChartData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                            <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
+                            <Tooltip
+                              formatter={(value: number) => [`$${value.toFixed(2)}`, "Revenue"]}
+                              contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                            />
+                            <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
+                              {analyticsData.categoryChartData.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400">
+                          No data for this period
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Top Selling Products */}
+                <motion.div
+                  className="bg-white rounded-xl p-5 shadow-sm border"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                >
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-green-500" />
+                    Top Selling Products
+                  </h3>
+                  {analyticsData.topProducts.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 text-sm font-medium text-gray-500">Product</th>
+                            <th className="text-right py-2 px-3 text-sm font-medium text-gray-500">Qty Sold</th>
+                            <th className="text-right py-2 px-3 text-sm font-medium text-gray-500">Revenue</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analyticsData.topProducts.map((product, index) => (
+                            <tr key={index} className="border-b last:border-0">
+                              <td className="py-3 px-3">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white`} style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}>
+                                    {index + 1}
+                                  </span>
+                                  <span className="font-medium text-gray-800">{product.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-right text-gray-600">{product.quantity}</td>
+                              <td className="py-3 px-3 text-right font-medium text-gray-800">${product.revenue.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-gray-400">
+                      No product data for this period
+                    </div>
+                  )}
+                </motion.div>
+              </>
+            )}
           </div>
         )}
 
@@ -1604,37 +2399,168 @@ const AdminDashboard = memo(() => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-item-category">Category</Label>
-                  <Select 
-                    value={newItemForm.category} 
-                    onValueChange={(v) => setNewItemForm(prev => ({ ...prev, category: v }))}
-                  >
-                    <SelectTrigger id="new-item-category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cookies">Cookies</SelectItem>
-                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
-                      <SelectItem value="cakepops">Cake Pops</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {showNewCategoryInput ? (
+                    <div className="flex gap-2">
+                      <Input
+                        value={newCategoryInput}
+                        onChange={(e) => setNewCategoryInput(e.target.value)}
+                        placeholder="New category name"
+                        className="flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            createCategoryInline(newCategoryInput, false);
+                          }
+                          if (e.key === 'Escape') {
+                            setShowNewCategoryInput(false);
+                            setNewCategoryInput("");
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        onClick={() => createCategoryInline(newCategoryInput, false)}
+                        disabled={isAddingCategory}
+                      >
+                        {isAddingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      </Button>
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => {
+                          setShowNewCategoryInput(false);
+                          setNewCategoryInput("");
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select 
+                      value={newItemForm.category} 
+                      onValueChange={(v) => {
+                        if (v === "__new__") {
+                          setShowNewCategoryInput(true);
+                        } else {
+                          setNewItemForm(prev => ({ ...prev, category: v }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="new-item-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.slug}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                        {/* Fallback if no categories loaded */}
+                        {categories.length === 0 && (
+                          <>
+                            <SelectItem value="cookies">Cookies</SelectItem>
+                            <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                            <SelectItem value="cakepops">Cake Pops</SelectItem>
+                          </>
+                        )}
+                        <SelectItem value="__new__" className="text-primary font-medium">
+                          <span className="flex items-center gap-1">
+                            <Plus className="w-4 h-4" /> Add New Category
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-item-image">Image Path</Label>
-                <Input
-                  id="new-item-image"
-                  value={newItemForm.image_path}
-                  onChange={(e) => setNewItemForm(prev => ({ ...prev, image_path: e.target.value }))}
-                  placeholder="e.g., cookies/My Cookie.webp"
-                />
-                <p className="text-xs text-gray-500">Path relative to the assets folder</p>
+                <Label>Product Image</Label>
+                <div
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    isDragging 
+                      ? 'border-primary bg-primary/5' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => handleDrop(e, false)}
+                >
+                  {isUploadingImage ? (
+                    <div className="py-4">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                      <p className="text-sm text-gray-500 mt-2">Uploading...</p>
+                    </div>
+                  ) : uploadedImagePreview || newItemForm.image_path ? (
+                    <div className="space-y-2">
+                      <img 
+                        src={uploadedImagePreview || getImageUrl(newItemForm.image_path) || ''} 
+                        alt="Preview" 
+                        className="w-24 h-24 object-cover rounded-lg mx-auto"
+                      />
+                      <p className="text-xs text-gray-500 truncate">{newItemForm.image_path}</p>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setNewItemForm(prev => ({ ...prev, image_path: "" }));
+                          setUploadedImagePreview(null);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer block py-4">
+                      <Upload className="w-8 h-8 mx-auto text-gray-400" />
+                      <p className="text-sm text-gray-600 mt-2">
+                        Drag & drop an image here, or <span className="text-primary">browse</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFileSelect(e, false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddItemDialog(false)}>
+              <Button variant="outline" onClick={() => {
+                setShowAddItemDialog(false);
+                setShowNewCategoryInput(false);
+                setNewCategoryInput("");
+              }}>
                 Cancel
               </Button>
-              <Button onClick={addNewItem} disabled={isAddingItem}>
+              <Button 
+                onClick={addNewItem} 
+                disabled={
+                  isAddingItem || 
+                  showNewCategoryInput || 
+                  !newItemForm.name.trim() || 
+                  !newItemForm.price || 
+                  !newItemForm.category ||
+                  parseFloat(newItemForm.price) <= 0
+                }
+                title={
+                  showNewCategoryInput 
+                    ? "Please save the new category first" 
+                    : !newItemForm.name.trim() 
+                    ? "Name is required"
+                    : !newItemForm.price || parseFloat(newItemForm.price) <= 0
+                    ? "Valid price is required"
+                    : !newItemForm.category
+                    ? "Category is required"
+                    : ""
+                }
+              >
                 {isAddingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Add Item
               </Button>
@@ -1688,37 +2614,167 @@ const AdminDashboard = memo(() => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-item-category">Category</Label>
-                  <Select 
-                    value={editItemForm.category} 
-                    onValueChange={(v) => setEditItemForm(prev => ({ ...prev, category: v }))}
-                  >
-                    <SelectTrigger id="edit-item-category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cookies">Cookies</SelectItem>
-                      <SelectItem value="cupcakes">Cupcakes</SelectItem>
-                      <SelectItem value="cakepops">Cake Pops</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {showNewCategoryInput ? (
+                    <div className="flex gap-2">
+                      <Input
+                        value={newCategoryInput}
+                        onChange={(e) => setNewCategoryInput(e.target.value)}
+                        placeholder="New category name"
+                        className="flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            createCategoryInline(newCategoryInput, true);
+                          }
+                          if (e.key === 'Escape') {
+                            setShowNewCategoryInput(false);
+                            setNewCategoryInput("");
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        onClick={() => createCategoryInline(newCategoryInput, true)}
+                        disabled={isAddingCategory}
+                      >
+                        {isAddingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      </Button>
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => {
+                          setShowNewCategoryInput(false);
+                          setNewCategoryInput("");
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select 
+                      value={editItemForm.category} 
+                      onValueChange={(v) => {
+                        if (v === "__new__") {
+                          setShowNewCategoryInput(true);
+                        } else {
+                          setEditItemForm(prev => ({ ...prev, category: v }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="edit-item-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.slug}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                        {categories.length === 0 && (
+                          <>
+                            <SelectItem value="cookies">Cookies</SelectItem>
+                            <SelectItem value="cupcakes">Cupcakes</SelectItem>
+                            <SelectItem value="cakepops">Cake Pops</SelectItem>
+                          </>
+                        )}
+                        <SelectItem value="__new__" className="text-primary font-medium">
+                          <span className="flex items-center gap-1">
+                            <Plus className="w-4 h-4" /> Add New Category
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-item-image">Image Path</Label>
-                <Input
-                  id="edit-item-image"
-                  value={editItemForm.image_path}
-                  onChange={(e) => setEditItemForm(prev => ({ ...prev, image_path: e.target.value }))}
-                  placeholder="e.g., cookies/My Cookie.webp"
-                />
-                <p className="text-xs text-gray-500">Path relative to the assets folder</p>
+                <Label>Product Image</Label>
+                <div
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    isDraggingEdit 
+                      ? 'border-primary bg-primary/5' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingEdit(true); }}
+                  onDragLeave={() => setIsDraggingEdit(false)}
+                  onDrop={(e) => handleDrop(e, true)}
+                >
+                  {isUploadingEditImage ? (
+                    <div className="py-4">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                      <p className="text-sm text-gray-500 mt-2">Uploading...</p>
+                    </div>
+                  ) : editImagePreview || editItemForm.image_path ? (
+                    <div className="space-y-2">
+                      <img 
+                        src={editImagePreview || getImageUrl(editItemForm.image_path) || ''} 
+                        alt="Preview" 
+                        className="w-24 h-24 object-cover rounded-lg mx-auto"
+                      />
+                      <p className="text-xs text-gray-500 truncate">{editItemForm.image_path}</p>
+                      <label className="cursor-pointer">
+                        <Button type="button" variant="outline" size="sm" asChild>
+                          <span>Change Image</span>
+                        </Button>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleFileSelect(e, true)}
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer block py-4">
+                      <Upload className="w-8 h-8 mx-auto text-gray-400" />
+                      <p className="text-sm text-gray-600 mt-2">
+                        Drag & drop an image here, or <span className="text-primary">browse</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFileSelect(e, true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowEditItemDialog(false)}>
+              <Button variant="outline" onClick={() => {
+                setShowEditItemDialog(false);
+                setShowNewCategoryInput(false);
+                setNewCategoryInput("");
+              }}>
                 Cancel
               </Button>
-              <Button onClick={saveEditedItem} disabled={isSavingItem}>
+              <Button 
+                onClick={saveEditedItem} 
+                disabled={
+                  isSavingItem || 
+                  showNewCategoryInput || 
+                  !editItemForm.name.trim() || 
+                  !editItemForm.price || 
+                  !editItemForm.category ||
+                  parseFloat(editItemForm.price) <= 0
+                }
+                title={
+                  showNewCategoryInput 
+                    ? "Please save the new category first" 
+                    : !editItemForm.name.trim() 
+                    ? "Name is required"
+                    : !editItemForm.price || parseFloat(editItemForm.price) <= 0
+                    ? "Valid price is required"
+                    : !editItemForm.category
+                    ? "Category is required"
+                    : ""
+                }
+              >
                 {isSavingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Save Changes
               </Button>
@@ -1880,6 +2936,8 @@ const AdminDashboard = memo(() => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+          </div>
+        </div>
       </main>
     </div>
   );

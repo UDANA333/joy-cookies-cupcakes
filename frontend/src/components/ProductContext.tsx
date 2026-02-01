@@ -90,15 +90,40 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const apiProducts = await fetchProductsAPI();
-      // Map API products to include local images
-      const mappedProducts: Product[] = apiProducts.map((p: APIProduct) => ({
-        id: p.id,
-        name: p.name,
-        price: p.price,
-        category: p.category,
-        description: p.description,
-        image: imageMap[p.image_path] || fallbackProducts.find(fp => fp.id === p.id)?.image || '',
-      }));
+      // Map API products to include local images or uploaded images
+      const mappedProducts: Product[] = apiProducts.map((p: APIProduct) => {
+        // Check if it's a mapped asset image
+        if (imageMap[p.image_path]) {
+          return {
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            category: p.category,
+            description: p.description,
+            image: imageMap[p.image_path],
+          };
+        }
+        // Check if it's an uploaded image (starts with 'uploads/')
+        if (p.image_path && p.image_path.startsWith('uploads/')) {
+          return {
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            category: p.category,
+            description: p.description,
+            image: `/${p.image_path}`,
+          };
+        }
+        // Fallback to finding in fallback products
+        return {
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          category: p.category,
+          description: p.description,
+          image: fallbackProducts.find(fp => fp.id === p.id)?.image || '',
+        };
+      });
       setProducts(mappedProducts);
     } catch (err) {
       console.error('Failed to fetch products, using fallback:', err);

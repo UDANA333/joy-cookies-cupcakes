@@ -1,4 +1,4 @@
-import { useState, memo, useCallback } from "react";
+import { useState, memo, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -9,19 +9,25 @@ import { useCart } from "@/components/CartContext";
 import { useProducts } from "@/components/ProductContext";
 import heroImage from "@/assets/hero-banner.webp";
 
-type Category = "all" | "cookies" | "cupcakes" | "cakepops";
-
-const categories: { id: Category; label: string }[] = [
-  { id: "all", label: "All Treats" },
-  { id: "cookies", label: "Cookies" },
-  { id: "cupcakes", label: "Cupcakes" },
-  { id: "cakepops", label: "Cake Pops" },
-];
+// Helper to format category slug to display name
+function formatCategoryName(slug: string): string {
+  if (slug === "cakepops") return "Cake Pops";
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
 
 const Index = memo(() => {
-  const [activeCategory, setActiveCategory] = useState<Category>("all");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const { addItem, totalItems, showNotification } = useCart();
   const { products, getProductById } = useProducts();
+
+  // Dynamically get unique categories from products
+  const categories = useMemo(() => {
+    const uniqueCategories = [...new Set(products.map(p => p.category))];
+    return [
+      { id: "all", label: "All Treats" },
+      ...uniqueCategories.map(cat => ({ id: cat, label: formatCategoryName(cat) }))
+    ];
+  }, [products]);
 
   const filteredProducts = activeCategory === "all" 
     ? products 
@@ -171,104 +177,45 @@ const Index = memo(() => {
           {/* Product Grid - Show by category sections when "All Treats" is selected */}
           {activeCategory === "all" ? (
             <div className="space-y-16">
-              {/* Cookies Section */}
-              <div>
-                <motion.h3
-                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5 }}
-                >
-                  Cookies
-                </motion.h3>
-                <motion.div
-                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
-                  layout
-                >
-                  {products.filter(p => p.category === "cookies").map((product, index) => (
-                    <motion.div
-                      key={product.id}
-                      layout
-                      initial={{ opacity: 0, y: 30 }}
+              {/* Dynamic Category Sections */}
+              {categories.filter(cat => cat.id !== "all").map((category) => {
+                const categoryProducts = products.filter(p => p.category === category.id);
+                if (categoryProducts.length === 0) return null;
+                
+                return (
+                  <div key={category.id}>
+                    <motion.h3
+                      className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
+                      initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true }}
-                      transition={{ delay: index * 0.05, duration: 0.4 }}
+                      transition={{ duration: 0.5 }}
                     >
-                      <ProductCard
-                        {...product}
-                        onAddToCart={handleAddToCart}
-                      />
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </div>
-
-              {/* Cupcakes Section */}
-              <div>
-                <motion.h3
-                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5 }}
-                >
-                  Cupcakes
-                </motion.h3>
-                <motion.div
-                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
-                  layout
-                >
-                  {products.filter(p => p.category === "cupcakes").map((product, index) => (
+                      {category.label}
+                    </motion.h3>
                     <motion.div
-                      key={product.id}
+                      className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
                       layout
-                      initial={{ opacity: 0, y: 30 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: index * 0.05, duration: 0.4 }}
                     >
-                      <ProductCard
-                        {...product}
-                        onAddToCart={handleAddToCart}
-                      />
+                      {categoryProducts.map((product, index) => (
+                        <motion.div
+                          key={product.id}
+                          layout
+                          initial={{ opacity: 0, y: 30 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: index * 0.05, duration: 0.4 }}
+                        >
+                          <ProductCard
+                            {...product}
+                            onAddToCart={handleAddToCart}
+                          />
+                        </motion.div>
+                      ))}
                     </motion.div>
-                  ))}
-                </motion.div>
-              </div>
-
-              {/* Cake Pops Section */}
-              <div>
-                <motion.h3
-                  className="font-display text-2xl md:text-3xl font-bold text-foreground mb-6"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5 }}
-                >
-                  Cake Pops
-                </motion.h3>
-                <motion.div
-                  className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
-                  layout
-                >
-                  {products.filter(p => p.category === "cakepops").map((product, index) => (
-                    <motion.div
-                      key={product.id}
-                      layout
-                      initial={{ opacity: 0, y: 30 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: index * 0.05, duration: 0.4 }}
-                    >
-                      <ProductCard
-                        {...product}
-                        onAddToCart={handleAddToCart}
-                      />
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <motion.div

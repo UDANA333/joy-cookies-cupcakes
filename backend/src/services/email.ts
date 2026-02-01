@@ -1,9 +1,16 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Gmail SMTP configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
-const BUSINESS_EMAIL = process.env.BUSINESS_EMAIL || 'joycookiescupcakes@gmail.com';
-const FROM_EMAIL = 'Joy Cookies & Cupcakes <orders@joycookiesandcupcakes.com>';
+const BUSINESS_EMAIL = process.env.GMAIL_USER || 'joycookiescupcakes@gmail.com';
+const FROM_NAME = 'Joy Cookies & Cupcakes';
 
 interface OrderItem {
   id: string;
@@ -159,22 +166,22 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
   `;
 
   try {
-    // In development without valid Resend key, just log
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.startsWith('re_xxxx')) {
-      console.log('📧 [DEV] Would send order confirmation to:', data.customerEmail);
+    // Check if Gmail credentials are configured
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('📧 [DEV] Gmail not configured. Would send order confirmation to:', data.customerEmail);
       console.log('   Order:', data.orderNumber);
       return { success: true, dev: true };
     }
 
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
+    const result = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${BUSINESS_EMAIL}>`,
       to: data.customerEmail,
       subject: `Order Confirmed! #${data.orderNumber} - Joy Cookies & Cupcakes`,
       html,
     });
 
     console.log('📧 Order confirmation sent to:', data.customerEmail);
-    return { success: true, id: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Failed to send order confirmation:', error);
     return { success: false, error };
@@ -234,20 +241,21 @@ export async function sendOrderNotification(data: OrderEmailData) {
   `;
 
   try {
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.startsWith('re_xxxx')) {
-      console.log('📧 [DEV] Would send order notification to:', BUSINESS_EMAIL);
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('📧 [DEV] Gmail not configured. Would send order notification to:', BUSINESS_EMAIL);
       return { success: true, dev: true };
     }
 
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
+    const result = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${BUSINESS_EMAIL}>`,
       to: BUSINESS_EMAIL,
+      replyTo: data.customerEmail,
       subject: `🔔 New Order #${data.orderNumber} - $${data.total.toFixed(2)}`,
       html,
     });
 
     console.log('📧 Order notification sent to:', BUSINESS_EMAIL);
-    return { success: true, id: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Failed to send order notification:', error);
     return { success: false, error };
@@ -292,13 +300,13 @@ export async function sendContactNotification(data: ContactEmailData) {
   `;
 
   try {
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.startsWith('re_xxxx')) {
-      console.log('📧 [DEV] Would send contact notification to:', BUSINESS_EMAIL);
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('📧 [DEV] Gmail not configured. Would send contact notification to:', BUSINESS_EMAIL);
       return { success: true, dev: true };
     }
 
-    const result = await resend.emails.send({
-      from: FROM_EMAIL,
+    const result = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${BUSINESS_EMAIL}>`,
       to: BUSINESS_EMAIL,
       replyTo: data.email,
       subject: `💬 New message from ${data.name}`,
@@ -306,7 +314,7 @@ export async function sendContactNotification(data: ContactEmailData) {
     });
 
     console.log('📧 Contact notification sent to:', BUSINESS_EMAIL);
-    return { success: true, id: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Failed to send contact notification:', error);
     return { success: false, error };

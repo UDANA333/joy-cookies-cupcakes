@@ -1,9 +1,42 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
 import db from '../db/database';
 import { authenticateAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// Configure multer for image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.'));
+    }
+  },
+});
+
+// Get the uploads directory path (frontend/public/uploads)
+function getUploadsDir(): string {
+  // In production, this should be configurable
+  const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../../frontend/public/uploads');
+  
+  // Ensure directory exists
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  
+  return uploadsDir;
+}
 
 interface Product {
   id: string;
@@ -325,6 +358,65 @@ router.patch('/category/:category/price', authenticateAdmin, (req, res) => {
   } catch (error) {
     console.error('Error updating category prices:', error);
     res.status(500).json({ error: 'Failed to update prices' });
+  }
+});
+
+// POST /api/products/upload - Upload product image (admin)
+router.post('/upload', authenticateAdmin, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const { category } = req.body;
+    if (!category) {
+      return res.status(400).json({ error: 'Category is required' });
+    }
+    
+    // Validate category exists in database OR is a valid slug format
+    const existingCategory = db.prepare('SELECT * FROM categories WHERE slug = ?').get(category);
+    // Allow if category exists OR if it's a valid slug format (for newly created categories)
+    const isValidSlug = /^[a-z0-9]+$/.test(category);
+    if (!existingCategory && !isValidSlug) {
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+
+    // Generate filename from original name, sanitized
+    const originalName = path.parse(req.file.originalname).name;
+    const sanitizedName = originalName.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+    const filename = `${sanitizedName}.webp`;
+    
+    // Create category subfolder
+    const uploadsDir = getUploadsDir();
+    const categoryDir = path.join(uploadsDir, category);
+    if (!fs.existsSync(categoryDir)) {
+      fs.mkdirSync(categoryDir, { recursive: true });
+    }
+
+    const filepath = path.join(categoryDir, filename);
+
+    // Process and save image as WebP
+    await sharp(req.file.buffer)
+      .resize(800, 800, { 
+        fit: 'inside', 
+        withoutEnlargement: true 
+      })
+      .webp({ quality: 85 })
+      .toFile(filepath);
+
+    // Return the path relative to public folder (for use in image_path)
+    const relativePath = `uploads/${category}/${filename}`;
+    
+    console.log(`📷 Image uploaded: ${relativePath}`);
+
+    res.json({ 
+      success: true, 
+      image_path: relativePath,
+      filename: filename
+    });
+  } catch (error: any) {
+    console.error('Error uploading image:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload image' });
   }
 });
 

@@ -1,7 +1,7 @@
 import { memo, useEffect } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { CheckCircle2, Calendar, Clock, Mail, Heart, MapPin } from "lucide-react";
+import { CheckCircle2, Calendar, Clock, Mail, Heart, MapPin, DollarSign, Banknote } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FloatingShapes from "@/components/FloatingShapes";
@@ -10,16 +10,22 @@ import { Button } from "@/components/ui/button";
 const Confirmation = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { formData, totalPrice, orderNumber, items } = (location.state as { 
+  const { formData, totalPrice, orderNumber, items, depositAmount, remainingBalance, paymentMethod } = (location.state as { 
     formData: { firstName: string; lastName?: string; email: string; pickupDate: string; pickupTime: string }; 
     totalPrice: number;
     orderNumber: string;
     items?: { id: string; name: string; price: number; quantity: number }[];
+    depositAmount?: number;
+    remainingBalance?: number;
+    paymentMethod?: string;
   }) || { 
     formData: null, 
     totalPrice: 0,
     orderNumber: "",
     items: [],
+    depositAmount: 0,
+    remainingBalance: 0,
+    paymentMethod: "",
   };
 
   // Redirect to home if accessed directly without order data
@@ -108,6 +114,34 @@ const Confirmation = memo(() => {
                   </span>
                 </div>
 
+                {/* Payment Summary - Show if deposit was paid */}
+                {depositAmount && depositAmount > 0 && (
+                  <div className="space-y-3 pb-3 sm:pb-4 border-b border-border">
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">Deposit Paid ({paymentMethod})</span>
+                        </div>
+                        <span className="font-semibold text-green-700">${depositAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Banknote className="w-4 h-4 text-amber-600" />
+                          <span className="text-sm font-medium text-amber-700">Due at Pickup</span>
+                        </div>
+                        <span className="font-semibold text-amber-700">${(remainingBalance || 0).toFixed(2)}</span>
+                      </div>
+                      <p className="text-xs text-amber-600 mt-1">
+                        Pay via Venmo, PayPal, or Cash
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3 sm:space-y-4">
                   <div className="flex items-center gap-2 sm:gap-3">
                     <div className="w-8 h-8 sm:w-10 sm:h-10 bg-secondary rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
@@ -149,7 +183,12 @@ const Confirmation = memo(() => {
                 <div className="bg-rose-light/30 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-rose/20">
                   <p className="text-xs sm:text-sm text-chocolate-light text-center flex items-center justify-center gap-1.5 sm:gap-2">
                     <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                    <span>A confirmation and bill will be sent to your email.</span>
+                    <span>
+                      {remainingBalance && remainingBalance > 0 
+                        ? `Confirmation email sent! Remember to bring $${remainingBalance.toFixed(2)} for pickup.`
+                        : 'A confirmation and bill will be sent to your email.'
+                      }
+                    </span>
                   </p>
                 </div>
               </motion.div>

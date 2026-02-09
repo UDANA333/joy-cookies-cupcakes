@@ -14,14 +14,27 @@ import productRoutes from './routes/products';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Build CORS origins list
+const corsOrigins: (string | RegExp)[] = [
+  'http://localhost:8080', 
+  'http://localhost:5173', 
+  'http://127.0.0.1:8080',
+  /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:\d+$/  // Allow any 192.168.x.x network IP
+];
+
+// Add production frontend URL if configured
+if (process.env.FRONTEND_URL) {
+  corsOrigins.push(process.env.FRONTEND_URL);
+  // Also allow www subdomain
+  const url = new URL(process.env.FRONTEND_URL);
+  if (!url.hostname.startsWith('www.')) {
+    corsOrigins.push(`${url.protocol}//www.${url.hostname}${url.port ? ':' + url.port : ''}`);
+  }
+}
+
 // CORS configuration - MUST be before other middleware
 app.use(cors({
-  origin: [
-    'http://localhost:8080', 
-    'http://localhost:5173', 
-    'http://127.0.0.1:8080',
-    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:\d+$/  // Allow any 192.168.x.x network IP
-  ],
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -107,7 +120,7 @@ async function startServer() {
     // Start server
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📧 Business email: ${process.env.BUSINESS_EMAIL}`);
+      console.log(`📧 Business email: ${process.env.GMAIL_USER}`);
       console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
     });
   } catch (error) {

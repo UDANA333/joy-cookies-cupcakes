@@ -79,6 +79,9 @@ router.post('/', orderValidation, async (req: Request, res: Response, next: Next
       pickupTime,
       items,
       total,
+      depositAmount,
+      remainingBalance,
+      paymentDetails,
     } = req.body;
 
     // Generate unique order number
@@ -94,13 +97,24 @@ router.post('/', orderValidation, async (req: Request, res: Response, next: Next
       db.prepare('SELECT 1 FROM orders WHERE order_number = ?').get(orderNumber)
     );
 
-    // Insert order into database
+    // Determine payment method and status based on deposit payment
+    const paymentMethod = paymentDetails?.paymentMethod || 'pending';
+    const paymentStatus = paymentDetails?.depositPaid ? 'deposit_paid' : 'pending';
+    // Capitalize the payment method for display (e.g., 'paypal' -> 'PayPal')
+    const depositMethod = paymentDetails?.depositPaid 
+      ? (paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'venmo' ? 'Venmo' : paymentMethod)
+      : null;
+
+    // Insert order into database with proper UTC timestamp
     const id = uuidv4();
+    const nowUTC = new Date().toISOString(); // ISO format with 'Z' suffix for UTC
     const stmt = db.prepare(`
       INSERT INTO orders (
         id, order_number, customer_name, customer_email, customer_phone,
-        pickup_date, pickup_time, items, subtotal, total
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        pickup_date, pickup_time, items, subtotal, total,
+        deposit_amount, remaining_balance, payment_method, payment_status,
+        payment_transaction_id, payer_email, deposit_method, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -113,10 +127,19 @@ router.post('/', orderValidation, async (req: Request, res: Response, next: Next
       pickupTime,
       JSON.stringify(items),
       total,
-      total
+      total,
+      depositAmount || 0,
+      remainingBalance || total,
+      paymentMethod,
+      paymentStatus,
+      paymentDetails?.transactionId || null,
+      paymentDetails?.payerEmail || null,
+      depositMethod,
+      nowUTC,
+      nowUTC
     );
 
-    console.log(`✅ Order created: ${orderNumber}`);
+    console.log(`✅ Order created: ${orderNumber} (Deposit: $${depositAmount?.toFixed(2) || '0.00'} via ${paymentMethod})`);
 
     // Send emails (non-blocking)
     const emailData = {
@@ -128,6 +151,10 @@ router.post('/', orderValidation, async (req: Request, res: Response, next: Next
       pickupTime,
       items,
       total,
+      depositAmount: depositAmount || 0,
+      remainingBalance: remainingBalance || total,
+      paymentMethod,
+      transactionId: paymentDetails?.transactionId,
     };
 
     // Send confirmation to customer
@@ -150,14 +177,14 @@ router.post('/', orderValidation, async (req: Request, res: Response, next: Next
   }
 });
 
-// Get order by order number (for confirmation page)
+// Get order by order number (for confirmation page and pay balance page)
 router.get('/:orderNumber', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orderNumber } = req.params;
 
     const order = db.prepare(`
       SELECT order_number, customer_name, customer_email, pickup_date, pickup_time, 
-             items, total, created_at
+             items, total, deposit_amount, remaining_balance, payment_status, created_at
       FROM orders WHERE order_number = ?
     `).get(orderNumber) as any;
 
@@ -178,8 +205,59 @@ router.get('/:orderNumber', async (req: Request, res: Response, next: NextFuncti
         pickupTime: order.pickup_time,
         items: order.items,
         total: order.total,
+        depositAmount: order.deposit_amount || 0,
+        remainingBalance: order.remaining_balance || order.total,
+        paymentStatus: order.payment_status || 'pending',
         createdAt: order.created_at,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Pay remaining balance for an order
+router.post('/:orderNumber/pay-balance', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orderNumber } = req.params;
+    const { transactionId, paymentMethod, payerEmail } = req.body;
+
+    // Get the order
+    const order = db.prepare(`
+      SELECT id, payment_status, remaining_balance FROM orders WHERE order_number = ?
+    `).get(orderNumber) as any;
+
+    if (!order) {
+      throw new AppError('Order not found', 404);
+    }
+
+    if (order.payment_status === 'paid') {
+      throw new AppError('Order has already been fully paid', 400);
+    }
+
+    // Format the balance method for display (e.g., 'paypal' -> 'PayPal')
+    const balanceMethod = paymentMethod === 'paypal' ? 'PayPal' 
+      : paymentMethod === 'venmo' ? 'Venmo' 
+      : paymentMethod || 'Online';
+
+    // Update the order to fully paid with proper UTC timestamp
+    const nowUTC = new Date().toISOString();
+    db.prepare(`
+      UPDATE orders 
+      SET payment_status = 'paid',
+          remaining_balance = 0,
+          balance_method = ?,
+          payment_transaction_id = COALESCE(payment_transaction_id || ', ', '') || ?,
+          payer_email = COALESCE(?, payer_email),
+          updated_at = ?
+      WHERE order_number = ?
+    `).run(balanceMethod, transactionId, payerEmail, nowUTC, orderNumber);
+
+    console.log(`✅ Remaining balance paid for ${orderNumber} via ${balanceMethod} (${transactionId})`);
+
+    res.json({
+      success: true,
+      message: 'Payment successful! Your order is fully paid.',
     });
   } catch (error) {
     next(error);

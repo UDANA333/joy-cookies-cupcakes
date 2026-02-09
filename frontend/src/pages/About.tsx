@@ -67,7 +67,7 @@ const About = memo(() => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              Where every bite tells a story of love, tradition, and homemade happiness
+              A local home baker from Farmington Hills, MI, sharing love through every bite
             </motion.p>
           </motion.div>
         </div>
@@ -93,14 +93,15 @@ const About = memo(() => {
                   </h2>
                 </div>
                 <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                  Joy Cookies & Cupcakes started in a cozy kitchen with a simple dream: 
-                  to spread happiness, one treat at a time. What began as baking for 
-                  family and friends quickly grew into something magical.
+                  Hi! I'm a local home baker based in Farmington Hills, MI. What began as 
+                  a simple hobby, baking for comfort, joy, and the people around me, has 
+                  recently grown into a small business.
                 </p>
                 <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                  Every recipe has been perfected over years of love and taste-testing 
-                  (our favorite part!). We believe that the best treats come from real 
-                  ingredients, time-honored techniques, and a whole lot of heart.
+                  I specialize in chewy cookies and cupcakes, baked in small batches with 
+                  care and intention. Every order is made fresh using quality ingredients 
+                  and offered at an affordable price because I believe good food is meant 
+                  to be shared and enjoyed.
                 </p>
               </div>
               <motion.div
@@ -110,10 +111,10 @@ const About = memo(() => {
               >
                 <Cookie className="w-12 h-12 sm:w-16 sm:h-16 text-primary mx-auto mb-3 sm:mb-4" />
                 <p className="font-display text-xl sm:text-2xl font-semibold text-foreground mb-2">
-                  100% Homemade
+                  Small Batch Baked
                 </p>
                 <p className="text-sm sm:text-base text-muted-foreground">
-                  Every single treat, baked with care
+                  Fresh, quality ingredients in every order
                 </p>
               </motion.div>
             </motion.div>
@@ -127,24 +128,24 @@ const About = memo(() => {
               transition={{ duration: 0.5 }}
             >
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground text-center mb-6 sm:mb-8 md:mb-10">
-                What We Believe In
+                What This Means to Me
               </h2>
               <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
                 {[
                   {
-                    icon: "🧈",
-                    title: "Real Ingredients",
-                    desc: "Fresh butter, farm eggs, quality chocolate. No shortcuts, no artificial anything.",
+                    icon: "🤍",
+                    title: "More Than Baking",
+                    desc: "This business is a way to serve, create, and grow while I continue my education.",
                   },
                   {
-                    icon: "💕",
-                    title: "Made with Love",
-                    desc: "Every batch is baked with intention, care, and a sprinkle of joy.",
+                    icon: "🎓",
+                    title: "Baking with Purpose",
+                    desc: "All proceeds go directly toward baking supplies and my graduate school tuition.",
                   },
                   {
                     icon: "✨",
-                    title: "Special Moments",
-                    desc: "We're honored to be part of your celebrations, big and small.",
+                    title: "Growing Together",
+                    desc: "Thank you for supporting a local baker and being part of something that's growing with purpose.",
                   },
                 ].map((value, index) => (
                   <motion.div
@@ -177,8 +178,8 @@ const About = memo(() => {
                 Ready to Taste the Joy?
               </h2>
               <p className="text-sm sm:text-base text-muted-foreground mb-6 sm:mb-8 max-w-md mx-auto">
-                Browse our menu and discover your new favorite treat. 
-                We can't wait to bake for you!
+                Browse the menu and discover your new favorite treat. 
+                I can't wait to bake for you!
               </p>
               <Button variant="hero" size="xl" asChild className="touch-manipulation w-full sm:w-auto">
                 <a href="/#menu" className="flex items-center justify-center gap-2">

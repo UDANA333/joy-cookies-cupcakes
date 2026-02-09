@@ -293,10 +293,10 @@ const Contact = memo(() => {
                       For orders, questions, or sweet conversations
                     </p>
                     <a
-                      href="mailto:hello@joycookies.com"
+                      href="mailto:joycookiescupcakes@gmail.com"
                       className="text-sm sm:text-base text-primary font-semibold hover:text-rose-deep transition-colors touch-manipulation"
                     >
-                      hello@joycookies.com
+                      joycookiescupcakes@gmail.com
                     </a>
                   </div>
                 </div>

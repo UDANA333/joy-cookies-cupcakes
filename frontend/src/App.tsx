@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/admin/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminSetup from "./pages/admin/Setup";
+import PayBalance from "./pages/PayBalance";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/payment" element={<Payment />} />
               <Route path="/confirmation" element={<Confirmation />} />
+              <Route path="/pay-balance" element={<PayBalance />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/about" element={<About />} />
               {/* Admin Routes - SECRET URLs */}

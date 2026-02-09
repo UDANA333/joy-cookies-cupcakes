@@ -47,7 +47,7 @@ const Footer = memo(() => {
           <div className="space-y-3 sm:space-y-4 text-center sm:text-right sm:col-span-2 md:col-span-1">
             <h4 className="font-display text-base sm:text-lg font-semibold text-foreground">Get in Touch</h4>
             <p className="text-muted-foreground text-xs sm:text-sm">
-              hello@joycookies.com
+              joycookiescupcakes@gmail.com
             </p>
             <p className="text-muted-foreground text-xs sm:text-sm italic">
               Pickup orders only • Made with love

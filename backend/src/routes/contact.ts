@@ -35,14 +35,15 @@ router.post('/', contactValidation, async (req: Request, res: Response, next: Ne
 
     const { name, email, message } = req.body;
 
-    // Insert into database
+    // Insert into database with proper UTC timestamp
     const id = uuidv4();
+    const nowUTC = new Date().toISOString();
     const stmt = db.prepare(`
-      INSERT INTO contact_messages (id, name, email, message)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO contact_messages (id, name, email, message, created_at)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
-    stmt.run(id, name, email, message);
+    stmt.run(id, name, email, message, nowUTC);
 
     console.log(`📬 Contact message received from: ${name} <${email}>`);
 

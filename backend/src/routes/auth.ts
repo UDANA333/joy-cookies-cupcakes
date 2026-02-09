@@ -130,12 +130,13 @@ router.post('/register-device', async (req: Request, res: Response, next: NextFu
     const deviceToken = uuidv4();
     const name = deviceName || `Device ${new Date().toLocaleDateString()}`;
     const browser = browserInfo || 'Unknown';
+    const nowUTC = new Date().toISOString();
 
     // Insert device
     const result = db.prepare(`
       INSERT INTO registered_devices (token, name, browser_info, is_active, registered_via, created_at)
-      VALUES (?, ?, ?, 1, ?, datetime('now'))
-    `).run(deviceToken, name, browser, registeredVia);
+      VALUES (?, ?, ?, 1, ?, ?)
+    `).run(deviceToken, name, browser, registeredVia, nowUTC);
 
     // If registered via code, mark the code as used
     if (usedCodeId) {
@@ -166,12 +167,13 @@ router.post('/register-device', async (req: Request, res: Response, next: NextFu
 router.post('/devices/generate-code', authenticateAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const code = generateDeviceCode();
+    const nowUTC = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
 
     db.prepare(`
       INSERT INTO device_codes (code, expires_at, created_at)
-      VALUES (?, ?, datetime('now'))
-    `).run(code, expiresAt);
+      VALUES (?, ?, ?)
+    `).run(code, expiresAt, nowUTC);
 
     console.log(`🎟️ Device code generated: ${code}`);
 
@@ -340,8 +342,9 @@ router.post('/login', loginValidation, async (req: Request, res: Response, next:
     // SECURITY: Regenerate device token on each login
     // This invalidates any copied tokens
     const newDeviceToken = uuidv4();
-    db.prepare('UPDATE registered_devices SET token = ?, last_used = datetime(\'now\') WHERE token = ?')
-      .run(newDeviceToken, deviceToken);
+    const nowUTC = new Date().toISOString();
+    db.prepare('UPDATE registered_devices SET token = ?, last_used = ? WHERE token = ?')
+      .run(newDeviceToken, nowUTC, deviceToken);
 
     // Generate JWT token (include NEW deviceToken for revocation checks)
     const token = jwt.sign(
@@ -404,8 +407,9 @@ router.post('/change-password', authenticateAdmin, async (req: Request, res: Res
     const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
     // Update password
-    db.prepare('UPDATE admins SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?')
-      .run(newPasswordHash, adminId);
+    const nowUTC = new Date().toISOString();
+    db.prepare('UPDATE admins SET password_hash = ?, updated_at = ? WHERE id = ?')
+      .run(newPasswordHash, nowUTC, adminId);
 
     console.log(`🔑 Password changed for: ${admin.email}`);
 

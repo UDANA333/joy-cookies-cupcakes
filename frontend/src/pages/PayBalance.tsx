@@ -1,54 +1,81 @@
 import { memo, useCallback, useEffect, useState, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CreditCard, Loader2, CheckCircle2, AlertCircle, DollarSign, Banknote } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FloatingShapes from "@/components/FloatingShapes";
-import { useCart } from "@/components/CartContext";
-import { submitOrder } from "@/lib/api";
+import { getOrder, payRemainingBalance } from "@/lib/api";
 
-const Payment = memo(() => {
-  const location = useLocation();
+interface OrderData {
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  pickupDate: string;
+  pickupTime: string;
+  total: number;
+  depositAmount: number;
+  remainingBalance: number;
+  paymentStatus: string;
+}
+
+const PayBalance = memo(() => {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { items, totalItems, totalPrice, clearCart } = useCart();
+  const orderNumber = searchParams.get("order");
   
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [order, setOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [orderSuccess, setOrderSuccess] = useState(false);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [isNavigatingToConfirmation, setIsNavigatingToConfirmation] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [paypalReady, setPaypalReady] = useState(false);
   const [paypalLoadError, setPaypalLoadError] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'venmo' | 'paypal' | null>(null);
   
   const paypalContainerRef = useRef<HTMLDivElement>(null);
   const venmoContainerRef = useRef<HTMLDivElement>(null);
   const paypalButtonRendered = useRef(false);
   const venmoButtonRendered = useRef(false);
-  
-  const { formData } = (location.state as { 
-    formData: { 
-      firstName: string; 
-      email: string; 
-      phone?: string;
-      pickupDate: string; 
-      pickupTime: string 
-    } 
-  }) || { formData: null };
 
-  // Calculate deposit (50%) and remaining balance
-  const depositAmount = Math.round(totalPrice * 0.5 * 100) / 100;
-  const remainingBalance = Math.round((totalPrice - depositAmount) * 100) / 100;
-
-  // Redirect to checkout if accessed directly without form data
+  // Fetch order details
   useEffect(() => {
-    if (isNavigatingToConfirmation || orderSuccess) return;
-    
-    if (!formData || !formData.email || items.length === 0) {
-      navigate('/checkout', { replace: true });
+    if (!orderNumber) {
+      setError("No order number provided");
+      setLoading(false);
+      return;
     }
-  }, [formData, items.length, navigate, isNavigatingToConfirmation, orderSuccess]);
+
+    const fetchOrder = async () => {
+      try {
+        const data = await getOrder(orderNumber);
+        if (data.order) {
+          const orderData: OrderData = {
+            orderNumber: data.order.orderNumber,
+            customerName: data.order.customerName,
+            customerEmail: data.order.customerEmail,
+            pickupDate: data.order.pickupDate,
+            pickupTime: data.order.pickupTime,
+            total: data.order.total,
+            depositAmount: data.order.depositAmount || 0,
+            remainingBalance: data.order.remainingBalance || data.order.total,
+            paymentStatus: data.order.paymentStatus,
+          };
+          
+          if (orderData.paymentStatus === "paid") {
+            setError("This order has already been fully paid!");
+          } else {
+            setOrder(orderData);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load order");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrder();
+  }, [orderNumber]);
 
   // Check if PayPal SDK is loaded with timeout
   useEffect(() => {
@@ -62,86 +89,45 @@ const Payment = memo(() => {
         setPaypalLoadError(false);
       } else if (attempts >= maxAttempts) {
         setPaypalLoadError(true);
-        setError('Payment system failed to load. Please refresh the page or try again later.');
+        setError('Payment system failed to load. Please refresh the page.');
       } else {
         setTimeout(checkPayPal, 500);
       }
     };
     checkPayPal();
     
-    return () => { attempts = maxAttempts; }; // Cleanup
+    return () => { attempts = maxAttempts; };
   }, []);
 
-  // Submit order after successful payment
+  // Handle successful payment
   const handlePaymentSuccess = useCallback(async (paymentDetails: {
     transactionId: string;
     paymentMethod: string;
     payerEmail?: string;
   }) => {
-    if (!formData) return;
+    if (!order) return;
     
     setIsSubmitting(true);
     setError(null);
     
     try {
-      const orderData = {
-        customerName: formData.firstName || '',
-        customerEmail: formData.email,
-        customerPhone: formData.phone || undefined,
-        pickupDate: formData.pickupDate,
-        pickupTime: formData.pickupTime,
-        items: items.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          category: item.category,
-        })),
-        total: totalPrice,
-        depositAmount: depositAmount,
-        remainingBalance: remainingBalance,
-        paymentDetails: {
-          transactionId: paymentDetails.transactionId,
-          paymentMethod: paymentDetails.paymentMethod,
-          payerEmail: paymentDetails.payerEmail,
-          depositPaid: true,
-        },
-      };
+      await payRemainingBalance(order.orderNumber, {
+        transactionId: paymentDetails.transactionId,
+        paymentMethod: paymentDetails.paymentMethod,
+        payerEmail: paymentDetails.payerEmail,
+      });
       
-      const response = await submitOrder(orderData);
-      
-      if (response.success) {
-        setOrderNumber(response.orderNumber);
-        setOrderSuccess(true);
-        setIsNavigatingToConfirmation(true);
-        clearCart();
-        
-        setTimeout(() => {
-          navigate("/confirmation", { 
-            state: { 
-              orderNumber: response.orderNumber,
-              formData, 
-              totalPrice,
-              depositAmount,
-              remainingBalance,
-              items,
-              paymentMethod: paymentDetails.paymentMethod,
-            },
-            replace: true,
-          });
-        }, 2000);
-      }
+      setPaymentSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit order. Please try again.');
-      console.error('Order submission error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process payment');
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, items, totalPrice, depositAmount, remainingBalance, clearCart, navigate]);
+  }, [order]);
 
-  // Initialize PayPal Buttons
+  // Initialize PayPal Button
   useEffect(() => {
-    if (!paypalReady || !paypalContainerRef.current || paypalButtonRendered.current || depositAmount <= 0) return;
+    if (!paypalReady || !paypalContainerRef.current || paypalButtonRendered.current || !order || order.remainingBalance <= 0) return;
     
     try {
       const paypalButtons = window.paypal?.Buttons({
@@ -150,7 +136,7 @@ const Payment = memo(() => {
           color: 'blue',
           shape: 'pill',
           label: 'pay',
-          height: 55, // Larger for mobile touch
+          height: 55,
           tagline: false,
         },
         fundingSource: window.paypal?.FUNDING.PAYPAL,
@@ -158,10 +144,10 @@ const Payment = memo(() => {
           return actions.order.create({
             intent: 'CAPTURE',
             purchase_units: [{
-              description: `Joy Cookies & Cupcakes - 50% Deposit`,
+              description: `Joy Cookies & Cupcakes - Remaining Balance for ${order.orderNumber}`,
               amount: {
                 currency_code: 'USD',
-                value: depositAmount.toFixed(2),
+                value: order.remainingBalance.toFixed(2),
               },
             }],
             application_context: {
@@ -173,7 +159,6 @@ const Payment = memo(() => {
         onApprove: async (_data, actions) => {
           try {
             const details = await actions.order.capture();
-            setPaymentMethod('paypal');
             await handlePaymentSuccess({
               transactionId: details.id,
               paymentMethod: 'PayPal',
@@ -200,11 +185,11 @@ const Payment = memo(() => {
     } catch (err) {
       console.error('PayPal button error:', err);
     }
-  }, [paypalReady, depositAmount, handlePaymentSuccess]);
+  }, [paypalReady, order, handlePaymentSuccess]);
 
   // Initialize Venmo Button
   useEffect(() => {
-    if (!paypalReady || !venmoContainerRef.current || venmoButtonRendered.current || depositAmount <= 0) return;
+    if (!paypalReady || !venmoContainerRef.current || venmoButtonRendered.current || !order || order.remainingBalance <= 0) return;
     
     try {
       const venmoButtons = window.paypal?.Buttons({
@@ -213,7 +198,7 @@ const Payment = memo(() => {
           color: 'blue',
           shape: 'pill',
           label: 'pay',
-          height: 55, // Larger for mobile touch
+          height: 55,
           tagline: false,
         },
         fundingSource: window.paypal?.FUNDING.VENMO,
@@ -221,10 +206,10 @@ const Payment = memo(() => {
           return actions.order.create({
             intent: 'CAPTURE',
             purchase_units: [{
-              description: `Joy Cookies & Cupcakes - 50% Deposit`,
+              description: `Joy Cookies & Cupcakes - Remaining Balance for ${order.orderNumber}`,
               amount: {
                 currency_code: 'USD',
-                value: depositAmount.toFixed(2),
+                value: order.remainingBalance.toFixed(2),
               },
             }],
             application_context: {
@@ -236,7 +221,6 @@ const Payment = memo(() => {
         onApprove: async (_data, actions) => {
           try {
             const details = await actions.order.capture();
-            setPaymentMethod('venmo');
             await handlePaymentSuccess({
               transactionId: details.id,
               paymentMethod: 'Venmo',
@@ -263,10 +247,10 @@ const Payment = memo(() => {
     } catch (err) {
       console.error('Venmo button error:', err);
     }
-  }, [paypalReady, depositAmount, handlePaymentSuccess]);
+  }, [paypalReady, order, handlePaymentSuccess]);
 
-  // Show success state
-  if (orderSuccess) {
+  // Success state
+  if (paymentSuccess) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar cartCount={0} />
@@ -287,17 +271,73 @@ const Payment = memo(() => {
                 <CheckCircle2 className="w-12 h-12 text-green-600" />
               </motion.div>
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-3">
-                Deposit Received!
+                Payment Complete!
               </h2>
               <p className="text-muted-foreground mb-2">
-                Your order number is:
+                Your remaining balance for order
               </p>
               <p className="font-mono text-xl font-bold text-primary mb-4">
-                {orderNumber}
+                {order?.orderNumber}
               </p>
-              <p className="text-sm text-muted-foreground">
-                Redirecting to confirmation page...
+              <p className="text-sm text-muted-foreground mb-6">
+                has been paid in full. See you at pickup! 🎉
               </p>
+              <button
+                onClick={() => navigate("/")}
+                className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              >
+                Back to Home
+              </button>
+            </motion.div>
+          </div>
+        </section>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar cartCount={0} />
+        <section className="relative pt-20 sm:pt-24 md:pt-28 pb-12 sm:pb-16 md:pb-20 min-h-[70vh] sm:min-h-[80vh] flex items-center justify-center">
+          <FloatingShapes variant="section" />
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading order details...</p>
+          </div>
+        </section>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Error state (no order found or already paid)
+  if (error && !order) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar cartCount={0} />
+        <section className="relative pt-20 sm:pt-24 md:pt-28 pb-12 sm:pb-16 md:pb-20 min-h-[70vh] sm:min-h-[80vh] flex items-center">
+          <FloatingShapes variant="section" />
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <motion.div
+              className="max-w-md mx-auto text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="font-display text-2xl font-bold text-foreground mb-3">
+                {error}
+              </h2>
+              <button
+                onClick={() => navigate("/")}
+                className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              >
+                Back to Home
+              </button>
             </motion.div>
           </div>
         </section>
@@ -308,7 +348,7 @@ const Payment = memo(() => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar cartCount={totalItems} />
+      <Navbar cartCount={0} />
 
       <section className="relative pt-20 sm:pt-24 md:pt-28 pb-12 sm:pb-16 md:pb-20 min-h-[70vh] sm:min-h-[80vh] flex items-center">
         <FloatingShapes variant="section" />
@@ -330,10 +370,10 @@ const Payment = memo(() => {
                 <CreditCard className="w-6 h-6 sm:w-7 md:w-8 sm:h-7 md:h-8 text-primary" />
               </motion.div>
               <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2">
-                Pay Deposit
+                Pay Remaining Balance
               </h1>
               <p className="text-sm sm:text-base text-muted-foreground">
-                50% deposit required to confirm your order
+                Complete payment for order {order?.orderNumber}
               </p>
             </div>
 
@@ -347,36 +387,33 @@ const Payment = memo(() => {
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Order Total</span>
-                  <span className="font-semibold">${totalPrice.toFixed(2)}</span>
+                  <span className="font-semibold">${order?.total.toFixed(2)}</span>
                 </div>
                 
-                {/* Deposit Amount - Highlighted */}
-                <div className="bg-[#008CFF]/10 rounded-xl p-4 border-2 border-[#008CFF]/30">
+                {/* Deposit Paid */}
+                <div className="bg-green-50 rounded-xl p-4 border border-green-200">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-[#008CFF]" />
-                      <span className="font-semibold text-[#008CFF]">Deposit Due Now (50%)</span>
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      <span className="font-medium text-green-700">Deposit Already Paid</span>
                     </div>
-                    <span className="font-display text-2xl font-bold text-[#008CFF]">
-                      ${depositAmount.toFixed(2)}
+                    <span className="font-semibold text-green-700">
+                      ${order?.depositAmount.toFixed(2)}
                     </span>
                   </div>
                 </div>
                 
-                {/* Remaining Balance */}
-                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                {/* Remaining Balance - Highlighted */}
+                <div className="bg-amber-50 rounded-xl p-4 border-2 border-amber-300">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                      <Banknote className="w-5 h-5 text-amber-600" />
-                      <span className="font-medium text-amber-700">Due at Pickup</span>
+                      <DollarSign className="w-5 h-5 text-amber-600" />
+                      <span className="font-semibold text-amber-700">Amount Due Now</span>
                     </div>
-                    <span className="font-display text-xl font-bold text-amber-700">
-                      ${remainingBalance.toFixed(2)}
+                    <span className="font-display text-2xl font-bold text-amber-700">
+                      ${order?.remainingBalance.toFixed(2)}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-600 mt-2">
-                    Pay via Venmo/PayPal or Cash at pickup
-                  </p>
                 </div>
               </div>
 
@@ -411,19 +448,14 @@ const Payment = memo(() => {
                 ) : isSubmitting ? (
                   <div className="flex flex-col items-center justify-center py-8 space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-[#008CFF]" />
-                    <span className="text-sm text-muted-foreground">Processing your order...</span>
+                    <span className="text-sm text-muted-foreground">Processing payment...</span>
                     <span className="text-xs text-muted-foreground/70">Please don't close this page</span>
                   </div>
                 ) : (
                   <>
-                    {/* Venmo Button - Primary option */}
+                    {/* Venmo Button */}
                     <div className="space-y-2">
                       <div ref={venmoContainerRef} className="min-h-[55px]" />
-                      {!venmoButtonRendered.current && paypalReady && (
-                        <p className="text-xs text-center text-amber-600">
-                          Venmo is only available in the US. Use PayPal if Venmo doesn't appear.
-                        </p>
-                      )}
                     </div>
                     
                     <div className="relative my-4">
@@ -435,7 +467,7 @@ const Payment = memo(() => {
                       </div>
                     </div>
                     
-                    {/* PayPal Button - Alternative */}
+                    {/* PayPal Button */}
                     <div ref={paypalContainerRef} className="min-h-[55px]" />
                   </>
                 )}
@@ -453,21 +485,16 @@ const Payment = memo(() => {
                 </motion.div>
               )}
 
-              {/* Payment Info */}
-              <div className="bg-secondary/50 rounded-lg sm:rounded-xl p-3 sm:p-4">
-                <h3 className="font-semibold text-foreground text-sm mb-2">
-                  How it works
-                </h3>
-                <ol className="text-xs sm:text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
-                  <li>Pay 50% deposit now via Venmo or PayPal</li>
-                  <li>We'll confirm your order via email</li>
-                  <li>Pay remaining 50% at pickup (Venmo, PayPal, or Cash)</li>
-                </ol>
+              {/* Cash Option */}
+              <div className="bg-secondary/50 rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Banknote className="w-5 h-5 text-muted-foreground" />
+                  <span className="font-medium text-sm">Prefer to pay with cash?</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  You can also pay in cash when you pick up your order!
+                </p>
               </div>
-
-              <p className="text-[10px] sm:text-xs text-muted-foreground text-center">
-                Your deposit is required to reserve your order. Secure payments powered by PayPal.
-              </p>
             </motion.div>
           </motion.div>
         </div>
@@ -478,6 +505,6 @@ const Payment = memo(() => {
   );
 });
 
-Payment.displayName = "Payment";
+PayBalance.displayName = "PayBalance";
 
-export default Payment;
+export default PayBalance;

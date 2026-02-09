@@ -29,6 +29,10 @@ interface OrderEmailData {
   pickupTime: string;
   items: OrderItem[];
   total: number;
+  depositAmount?: number;
+  remainingBalance?: number;
+  paymentMethod?: string;
+  transactionId?: string;
 }
 
 interface ContactEmailData {
@@ -139,12 +143,45 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
             </tfoot>
           </table>
           
+          <!-- Payment Summary -->
+          ${data.depositAmount && data.depositAmount > 0 ? `
+          <div style="background: #e8f5e9; border-radius: 12px; padding: 20px; margin: 25px 0;">
+            <h3 style="margin: 0 0 15px; color: #2e7d32; font-size: 18px;">✅ Payment Summary</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #6b5555;">Deposit Paid (${data.paymentMethod || 'Online'}):</td>
+                <td style="padding: 8px 0; color: #2e7d32; font-weight: bold; text-align: right;">$${data.depositAmount.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b5555;">Remaining Balance Due at Pickup:</td>
+                <td style="padding: 8px 0; color: #e65100; font-weight: bold; text-align: right;">$${(data.remainingBalance || 0).toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <!-- Remaining Balance Payment Options -->
+          <div style="background: #fff3e0; border-radius: 12px; padding: 20px; margin: 25px 0;">
+            <h3 style="margin: 0 0 15px; color: #e65100; font-size: 18px;">💵 Pay Remaining Balance ($${(data.remainingBalance || 0).toFixed(2)})</h3>
+            <p style="margin: 0 0 15px; color: #6b5555; font-size: 14px;">
+              You can pay the remaining balance online or at pickup:
+            </p>
+            <div style="margin-bottom: 10px;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/pay-balance?order=${data.orderNumber}" style="display: inline-block; background: #008CFF; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500; margin-bottom: 8px;">
+                💳 Pay Now Online (Venmo/PayPal)
+              </a>
+            </div>
+            <p style="margin: 10px 0 0; color: #6b5555; font-size: 13px;">
+              💵 Cash is also accepted at pickup
+            </p>
+          </div>
+          ` : `
           <!-- Payment Reminder -->
           <div style="background: #fff5f5; border-left: 4px solid #e8a4a4; border-radius: 0 8px 8px 0; padding: 15px 20px; margin: 25px 0;">
             <p style="margin: 0; color: #6b5555; font-size: 14px;">
               <strong>💳 Payment:</strong> Please complete your payment via Venmo when you arrive for pickup.
             </p>
           </div>
+          `}
           
           <!-- Footer Message -->
           <p style="color: #6b5555; font-size: 14px; line-height: 1.6; margin: 25px 0 0;">
@@ -234,6 +271,17 @@ export async function sendOrderNotification(data: OrderEmailData) {
           <div style="background: #f8f8f8; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center;">
             <p style="margin: 0; color: #333; font-size: 20px; font-weight: bold;">Total: $${data.total.toFixed(2)}</p>
           </div>
+          
+          ${data.depositAmount && data.depositAmount > 0 ? `
+          <div style="background: #e8f5e9; border-radius: 8px; padding: 15px; margin-top: 15px;">
+            <p style="margin: 0 0 8px; color: #2e7d32; font-weight: bold;">💳 Payment Status</p>
+            <p style="margin: 0; color: #666; font-size: 14px;">
+              ✅ Deposit Paid: <strong>$${data.depositAmount.toFixed(2)}</strong> via ${data.paymentMethod || 'Online'}<br>
+              💵 Balance Due at Pickup: <strong style="color: #e65100;">$${(data.remainingBalance || 0).toFixed(2)}</strong>
+              ${data.transactionId ? `<br>Transaction ID: ${data.transactionId}` : ''}
+            </p>
+          </div>
+          ` : ''}
         </div>
       </div>
     </body>
@@ -402,6 +450,129 @@ export async function sendReplyEmail(data: ReplyEmailData) {
     return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Failed to send reply:', error);
+    return { success: false, error };
+  }
+}
+
+// Send "Ready for Pickup" notification to customer
+export async function sendReadyForPickupNotification(data: {
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  pickupDate: string;
+  pickupTime: string;
+  total: number;
+  remainingBalance?: number;
+}) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fdf8f8;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <!-- Header -->
+        <div style="text-align: center; padding: 30px 20px; background: linear-gradient(135deg, #4CAF50 0%, #81C784 100%); border-radius: 16px 16px 0 0;">
+          <h1 style="margin: 0; color: white; font-size: 28px;">🍪 Joy Cookies & Cupcakes</h1>
+          <p style="margin: 10px 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Your order is ready!</p>
+        </div>
+        
+        <!-- Content -->
+        <div style="background: white; padding: 30px; border-radius: 0 0 16px 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+          <h2 style="color: #4CAF50; margin: 0 0 20px; font-size: 24px; text-align: center;">🎉 Ready for Pickup!</h2>
+          
+          <p style="color: #6b5555; font-size: 16px; line-height: 1.6; text-align: center;">
+            Hi ${data.customerName || 'there'}! Great news - your sweet treats are ready and waiting for you!
+          </p>
+          
+          <!-- Order Number -->
+          <div style="background: #e8f5e9; border: 2px dashed #4CAF50; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0 0 5px; color: #6b5555; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Order Number</p>
+            <p style="margin: 0; color: #2e7d32; font-size: 24px; font-weight: bold;">${data.orderNumber}</p>
+          </div>
+          
+          <!-- Pickup Info -->
+          <div style="background: #f8f4f0; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <h3 style="margin: 0 0 15px; color: #4a3333; font-size: 18px;">📍 Pickup Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #6b5555;">Date:</td>
+                <td style="padding: 8px 0; color: #4a3333; font-weight: 500;">${formatDate(data.pickupDate)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b5555;">Time:</td>
+                <td style="padding: 8px 0; color: #4a3333; font-weight: 500;">${data.pickupTime}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b5555;">Location:</td>
+                <td style="padding: 8px 0; color: #4a3333; font-weight: 500;">Joy Cookies & Cupcakes</td>
+              </tr>
+            </table>
+            <a href="https://maps.app.goo.gl/z3BufPyu399hN2Dw9" style="display: inline-block; margin-top: 15px; color: #4CAF50; text-decoration: none; font-weight: 500;">
+              📍 Get Directions →
+            </a>
+          </div>
+          
+          ${data.remainingBalance && data.remainingBalance > 0 ? `
+          <!-- Remaining Balance Reminder -->
+          <div style="background: #fff3e0; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;">
+            <h3 style="margin: 0 0 10px; color: #e65100; font-size: 18px;">💰 Balance Due</h3>
+            <p style="margin: 0; color: #4a3333; font-size: 28px; font-weight: bold;">$${data.remainingBalance.toFixed(2)}</p>
+            <p style="margin: 15px 0; color: #6b5555; font-size: 14px;">
+              Pay online now or bring cash to pickup:
+            </p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/pay-balance?order=${data.orderNumber}" style="display: inline-block; background: linear-gradient(135deg, #008CFF 0%, #0056b3 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              💳 Pay Now Online
+            </a>
+            <p style="margin: 15px 0 0; color: #6b5555; font-size: 13px;">
+              💵 Cash is also accepted at pickup
+            </p>
+          </div>
+          ` : ''}
+          
+          <div style="background: #e8f5e9; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0; color: #2e7d32; font-size: 18px; font-weight: 500;">
+              ✨ We can't wait to see you!
+            </p>
+          </div>
+          
+          <p style="color: #6b5555; font-size: 14px; line-height: 1.6; margin: 25px 0 0;">
+            If you have any questions, feel free to reply to this email or contact us at ${BUSINESS_EMAIL}
+          </p>
+          
+          <p style="color: #e8a4a4; font-size: 16px; margin: 25px 0 0; text-align: center;">
+            Thank you for choosing Joy Cookies & Cupcakes! 💕
+          </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} Joy Cookies & Cupcakes. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('📧 [DEV] Gmail not configured. Would send "Ready for Pickup" email to:', data.customerEmail);
+      return { success: true, dev: true };
+    }
+
+    const result = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${BUSINESS_EMAIL}>`,
+      to: data.customerEmail,
+      subject: `🎉 Your order ${data.orderNumber} is ready for pickup!`,
+      html,
+    });
+
+    console.log('📧 Ready for pickup notification sent to:', data.customerEmail);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send ready notification:', error);
     return { success: false, error };
   }
 }

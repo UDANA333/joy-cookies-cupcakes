@@ -1,6 +1,7 @@
 import Database, { Database as DatabaseType } from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -118,6 +119,24 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
     CREATE INDEX IF NOT EXISTS idx_products_available ON products(is_available);
+
+    -- Order analytics table for aggregated historical data
+    CREATE TABLE IF NOT EXISTS order_analytics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_type TEXT NOT NULL,  -- 'monthly' or 'yearly'
+      period_start TEXT NOT NULL, -- Start date of the period (YYYY-MM-01 for monthly)
+      period_end TEXT NOT NULL,   -- End date of the period
+      total_orders INTEGER DEFAULT 0,
+      total_revenue REAL DEFAULT 0,
+      total_items_sold INTEGER DEFAULT 0,
+      orders_by_status TEXT,      -- JSON: { "completed": 10, "cancelled": 2 }
+      revenue_by_category TEXT,   -- JSON: { "cookies": 500, "cupcakes": 300 }
+      top_products TEXT,          -- JSON: [{ "name": "Chocolate Chip", "quantity": 50 }]
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(period_type, period_start)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_analytics_period ON order_analytics(period_type, period_start);
   `);
 
   // Run migrations for existing databases
@@ -179,6 +198,125 @@ function runMigrations() {
     } catch (e) {
       // Column might already exist
     }
+  }
+
+  // Add deposit-related columns to orders if they don't exist
+  const ordersTableInfo = db.prepare("PRAGMA table_info(orders)").all() as Array<{ name: string }>;
+  const ordersColumnNames = ordersTableInfo.map(col => col.name);
+  
+  if (!ordersColumnNames.includes('deposit_amount')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN deposit_amount REAL DEFAULT 0");
+      console.log('  ✓ Migration: Added deposit_amount column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+  
+  if (!ordersColumnNames.includes('remaining_balance')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN remaining_balance REAL DEFAULT 0");
+      console.log('  ✓ Migration: Added remaining_balance column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+  
+  if (!ordersColumnNames.includes('payment_transaction_id')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN payment_transaction_id TEXT");
+      console.log('  ✓ Migration: Added payment_transaction_id column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+  
+  if (!ordersColumnNames.includes('payer_email')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN payer_email TEXT");
+      console.log('  ✓ Migration: Added payer_email column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Add deposit_method column to track how deposit was paid (paypal, venmo)
+  if (!ordersColumnNames.includes('deposit_method')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN deposit_method TEXT");
+      console.log('  ✓ Migration: Added deposit_method column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Add balance_method column to track how balance was paid (paypal, venmo, cash)
+  if (!ordersColumnNames.includes('balance_method')) {
+    try {
+      db.exec("ALTER TABLE orders ADD COLUMN balance_method TEXT");
+      console.log('  ✓ Migration: Added balance_method column to orders');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Migrate existing orders: copy payment_method to deposit_method for orders with deposits
+  try {
+    const ordersToMigrate = db.prepare(`
+      SELECT id, payment_method FROM orders 
+      WHERE deposit_amount > 0 AND deposit_method IS NULL AND payment_method IS NOT NULL
+    `).all() as Array<{ id: string; payment_method: string }>;
+    
+    if (ordersToMigrate.length > 0) {
+      const updateStmt = db.prepare('UPDATE orders SET deposit_method = ? WHERE id = ?');
+      for (const order of ordersToMigrate) {
+        // Capitalize the method name for display
+        const depositMethod = order.payment_method === 'paypal' ? 'PayPal' 
+          : order.payment_method === 'venmo' ? 'Venmo' 
+          : order.payment_method;
+        updateStmt.run(depositMethod, order.id);
+      }
+      console.log(`  ✓ Migration: Updated deposit_method for ${ordersToMigrate.length} existing orders`);
+    }
+  } catch (e) {
+    // Migration might have already been applied
+  }
+
+  // Migrate existing timestamps to proper ISO format with Z suffix
+  // Old format: "2026-01-27 16:10:37" -> "2026-01-27T16:10:37.000Z"
+  try {
+    // Update orders timestamps
+    const ordersWithOldTimestamp = db.prepare(`
+      SELECT id, created_at, updated_at FROM orders 
+      WHERE created_at NOT LIKE '%T%' AND created_at NOT LIKE '%Z%'
+    `).all() as Array<{ id: string; created_at: string; updated_at: string }>;
+    
+    if (ordersWithOldTimestamp.length > 0) {
+      const updateStmt = db.prepare('UPDATE orders SET created_at = ?, updated_at = ? WHERE id = ?');
+      for (const order of ordersWithOldTimestamp) {
+        const createdAtISO = order.created_at ? order.created_at.replace(' ', 'T') + '.000Z' : null;
+        const updatedAtISO = order.updated_at ? order.updated_at.replace(' ', 'T') + '.000Z' : null;
+        updateStmt.run(createdAtISO, updatedAtISO, order.id);
+      }
+      console.log(`  ✓ Migration: Converted ${ordersWithOldTimestamp.length} order timestamps to ISO format`);
+    }
+
+    // Update contact_messages timestamps
+    const messagesWithOldTimestamp = db.prepare(`
+      SELECT id, created_at FROM contact_messages 
+      WHERE created_at NOT LIKE '%T%' AND created_at NOT LIKE '%Z%'
+    `).all() as Array<{ id: string; created_at: string }>;
+    
+    if (messagesWithOldTimestamp.length > 0) {
+      const updateMsgStmt = db.prepare('UPDATE contact_messages SET created_at = ? WHERE id = ?');
+      for (const msg of messagesWithOldTimestamp) {
+        const createdAtISO = msg.created_at ? msg.created_at.replace(' ', 'T') + '.000Z' : null;
+        updateMsgStmt.run(createdAtISO, msg.id);
+      }
+      console.log(`  ✓ Migration: Converted ${messagesWithOldTimestamp.length} message timestamps to ISO format`);
+    }
+  } catch (e) {
+    // Migration might have already been applied or no old timestamps exist
   }
 
   // Seed products if table is empty
@@ -269,6 +407,234 @@ function seedAdmin() {
     console.log(`    Email: ${adminEmail}`);
     console.log(`    Password: ${adminPassword}`);
   }
+}
+
+// Get database storage usage
+export function getStorageUsage() {
+  const dbPath = path.resolve(DB_PATH);
+  const dbDir = path.dirname(dbPath);
+  
+  let totalSize = 0;
+  const files: { name: string; size: number }[] = [];
+  
+  // Get all database-related files
+  const dbFiles = ['database.sqlite', 'database.sqlite-wal', 'database.sqlite-shm'];
+  for (const file of dbFiles) {
+    const filePath = path.join(dbDir, file);
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      files.push({ name: file, size: stats.size });
+      totalSize += stats.size;
+    }
+  }
+  
+  // Get table row counts
+  const tables = db.prepare(`
+    SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
+  `).all() as { name: string }[];
+  
+  const tableCounts: Record<string, number> = {};
+  for (const { name } of tables) {
+    const result = db.prepare(`SELECT COUNT(*) as count FROM ${name}`).get() as { count: number };
+    tableCounts[name] = result.count;
+  }
+  
+  // Run checkpoint to optimize WAL file
+  db.pragma('wal_checkpoint(PASSIVE)');
+  
+  // Get server disk space
+  const diskSpace = getDiskSpace(dbDir);
+  
+  return {
+    totalSize,
+    files,
+    tableCounts,
+    formattedSize: formatBytes(totalSize),
+    diskSpace,
+  };
+}
+
+// Get disk space for the partition containing the given path
+function getDiskSpace(dirPath: string): { total: number; free: number; used: number; usedPercent: number } | null {
+  try {
+    const isWindows = process.platform === 'win32';
+    
+    if (isWindows) {
+      // Windows: Use WMIC which is more reliable than PowerShell in child processes
+      const driveLetter = path.resolve(dirPath).charAt(0).toUpperCase();
+      const output = execSync(
+        `wmic logicaldisk where "DeviceID='${driveLetter}:'" get FreeSpace,Size /format:csv`,
+        { encoding: 'utf-8', timeout: 5000, windowsHide: true }
+      ).trim();
+      
+      // Parse CSV output: Node,FreeSpace,Size
+      const lines = output.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('Node'));
+      if (lines.length > 0) {
+        const parts = lines[0].split(',');
+        if (parts.length >= 3) {
+          const free = parseInt(parts[1], 10);
+          const total = parseInt(parts[2], 10);
+          const used = total - free;
+          return {
+            total,
+            free,
+            used,
+            usedPercent: total > 0 ? Math.round((used / total) * 100) : 0,
+          };
+        }
+      }
+    } else {
+      // Linux/Mac: Use df command
+      const output = execSync(`df -B1 "${dirPath}" | tail -1`, { encoding: 'utf-8', timeout: 5000 }).trim();
+      const parts = output.split(/\s+/);
+      if (parts.length >= 4) {
+        const total = parseInt(parts[1], 10);
+        const used = parseInt(parts[2], 10);
+        const free = parseInt(parts[3], 10);
+        return {
+          total,
+          free,
+          used,
+          usedPercent: total > 0 ? Math.round((used / total) * 100) : 0,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Error getting disk space:', error);
+  }
+  return null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Aggregate orders older than specified months into analytics
+export function aggregateOldOrders(monthsOld: number = 6) {
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - monthsOld);
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+  
+  // Get orders to aggregate (grouped by month)
+  const ordersToAggregate = db.prepare(`
+    SELECT 
+      strftime('%Y-%m-01', created_at) as period_start,
+      COUNT(*) as total_orders,
+      COALESCE(SUM(total), 0) as total_revenue,
+      GROUP_CONCAT(items) as all_items,
+      GROUP_CONCAT(order_status) as all_statuses
+    FROM orders 
+    WHERE DATE(created_at) < ?
+    GROUP BY strftime('%Y-%m', created_at)
+  `).all(cutoffStr) as any[];
+  
+  if (ordersToAggregate.length === 0) {
+    return { aggregated: 0, deleted: 0 };
+  }
+  
+  let aggregatedCount = 0;
+  let deletedCount = 0;
+  
+  const insertAnalytics = db.prepare(`
+    INSERT OR REPLACE INTO order_analytics 
+    (period_type, period_start, period_end, total_orders, total_revenue, total_items_sold, orders_by_status, revenue_by_category, top_products)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const deleteOldOrders = db.prepare(`
+    DELETE FROM orders WHERE DATE(created_at) < ? AND strftime('%Y-%m', created_at) = ?
+  `);
+  
+  const transaction = db.transaction(() => {
+    for (const monthData of ordersToAggregate) {
+      // Calculate period end (last day of month)
+      const periodStart = new Date(monthData.period_start);
+      const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+      const periodEndStr = periodEnd.toISOString().slice(0, 10);
+      
+      // Parse all items to calculate totals
+      let totalItems = 0;
+      const categoryRevenue: Record<string, number> = {};
+      const productCounts: Record<string, number> = {};
+      
+      const allItemsArrays = monthData.all_items.split('],[').map((chunk: string) => {
+        try {
+          if (!chunk.startsWith('[')) chunk = '[' + chunk;
+          if (!chunk.endsWith(']')) chunk = chunk + ']';
+          return JSON.parse(chunk);
+        } catch {
+          return [];
+        }
+      });
+      
+      for (const items of allItemsArrays) {
+        for (const item of items) {
+          if (item && item.quantity) {
+            totalItems += item.quantity;
+            const itemRevenue = (item.price || 0) * item.quantity;
+            categoryRevenue[item.category || 'other'] = (categoryRevenue[item.category || 'other'] || 0) + itemRevenue;
+            productCounts[item.name || 'Unknown'] = (productCounts[item.name || 'Unknown'] || 0) + item.quantity;
+          }
+        }
+      }
+      
+      // Calculate orders by status
+      const statusCounts: Record<string, number> = {};
+      const allStatuses = monthData.all_statuses.split(',');
+      for (const status of allStatuses) {
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      }
+      
+      // Get top 10 products
+      const topProducts = Object.entries(productCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([name, quantity]) => ({ name, quantity }));
+      
+      // Insert aggregated data
+      insertAnalytics.run(
+        'monthly',
+        monthData.period_start,
+        periodEndStr,
+        monthData.total_orders,
+        monthData.total_revenue,
+        totalItems,
+        JSON.stringify(statusCounts),
+        JSON.stringify(categoryRevenue),
+        JSON.stringify(topProducts)
+      );
+      
+      // Delete the old orders
+      const yearMonth = monthData.period_start.slice(0, 7);
+      const result = deleteOldOrders.run(cutoffStr, yearMonth);
+      
+      aggregatedCount++;
+      deletedCount += result.changes;
+    }
+  });
+  
+  transaction();
+  
+  // Vacuum to reclaim space
+  db.exec('VACUUM');
+  
+  console.log(`📊 Aggregated ${aggregatedCount} months, deleted ${deletedCount} old orders`);
+  
+  return { aggregated: aggregatedCount, deleted: deletedCount };
+}
+
+// Get historical analytics (from aggregated data)
+export function getHistoricalAnalytics() {
+  return db.prepare(`
+    SELECT * FROM order_analytics 
+    WHERE period_type = 'monthly'
+    ORDER BY period_start DESC
+    LIMIT 24
+  `).all();
 }
 
 export default db;

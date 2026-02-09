@@ -119,6 +119,16 @@ const imageMap: Record<string, string> = {
   'cakepops/Vanilla Cake Pop.webp': vanillaCakePop,
 };
 
+// Parse timestamp - handles both old format (UTC without Z) and new ISO format
+function parseTimestamp(dateStr: string): Date {
+  // If it's already ISO format with Z or timezone offset, parse directly
+  if (dateStr.includes('T') || dateStr.includes('Z') || dateStr.includes('+')) {
+    return new Date(dateStr);
+  }
+  // Old format: "2026-01-27 16:10:37" - this is UTC, add Z suffix
+  return new Date(dateStr.replace(' ', 'T') + 'Z');
+}
+
 // Helper to get image URL from image_path
 function getImageUrl(imagePath: string): string | null {
   if (!imagePath) return null;
@@ -143,6 +153,12 @@ interface Order {
   total: number;
   order_status: string;
   payment_status: string;
+  payment_method: string;
+  deposit_amount: number;
+  remaining_balance: number;
+  payment_transaction_id: string | null;
+  deposit_method: string | null;
+  balance_method: string | null;
   created_at: string;
 }
 
@@ -192,12 +208,46 @@ interface Category {
   display_order: number;
 }
 
+interface StorageUsage {
+  totalSize: number;
+  formattedSize: string;
+  files: { name: string; size: number }[];
+  tableCounts: Record<string, number>;
+  diskSpace: {
+    total: number;
+    free: number;
+    used: number;
+    usedPercent: number;
+  } | null;
+}
+
+// Format bytes to human-readable string
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
-  confirmed: "bg-blue-100 text-blue-800",
   ready: "bg-green-100 text-green-800",
-  completed: "bg-gray-100 text-gray-800",
+  picked_up: "bg-gray-100 text-gray-800",
   cancelled: "bg-red-100 text-red-800",
+  // Legacy statuses for backwards compatibility
+  confirmed: "bg-blue-100 text-blue-800",
+  completed: "bg-gray-100 text-gray-800",
+};
+
+const statusLabels: Record<string, string> = {
+  pending: "⏳ Pending",
+  ready: "✅ Ready",
+  picked_up: "📦 Picked Up",
+  cancelled: "❌ Cancelled",
+  // Legacy statuses for backwards compatibility
+  confirmed: "Confirmed",
+  completed: "Completed",
 };
 
 // Chart colors
@@ -296,6 +346,14 @@ const AdminDashboard = memo(() => {
   
   // Analytics time period
   const [analyticsPeriod, setAnalyticsPeriod] = useState<"week" | "month" | "year">("month");
+  
+  // Storage & maintenance state
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [isLoadingStorage, setIsLoadingStorage] = useState(false);
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false);
+  const [cleanupMonths, setCleanupMonths] = useState("6");
+  const [isRunningCleanup, setIsRunningCleanup] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ aggregated: number; deleted: number } | null>(null);
 
   // Analytics data calculations
   const analyticsData = useMemo(() => {
@@ -311,8 +369,9 @@ const AdminDashboard = memo(() => {
     };
     
     const startDate = getStartDate();
-    const filteredOrders = orders.filter(o => new Date(o.created_at) >= startDate);
-    const paidFilteredOrders = filteredOrders.filter(o => o.payment_status === "paid");
+    const filteredOrders = orders.filter(o => parseTimestamp(o.created_at) >= startDate);
+    // Include both paid and deposit_paid orders for revenue tracking
+    const paidFilteredOrders = filteredOrders.filter(o => o.payment_status === "paid" || o.payment_status === "deposit_paid");
     
     // Generate calendar-based timeline
     const generateTimelineKeys = () => {
@@ -362,7 +421,7 @@ const AdminDashboard = memo(() => {
     
     // Fill in actual order data
     filteredOrders.forEach(order => {
-      const date = new Date(order.created_at);
+      const date = parseTimestamp(order.created_at);
       let key: string;
       if (analyticsPeriod === "week") {
         key = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -448,10 +507,11 @@ const AdminDashboard = memo(() => {
     else prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
     
     const prevOrders = orders.filter(o => {
-      const date = new Date(o.created_at);
+      const date = parseTimestamp(o.created_at);
       return date >= prevStartDate && date < startDate;
     });
-    const paidPrevOrders = prevOrders.filter(o => o.payment_status === "paid");
+    // Include both paid and deposit_paid orders for revenue tracking
+    const paidPrevOrders = prevOrders.filter(o => o.payment_status === "paid" || o.payment_status === "deposit_paid");
 
     const currentRevenue = paidFilteredOrders.reduce((sum, o) => sum + o.total, 0);
     const prevRevenue = paidPrevOrders.reduce((sum, o) => sum + o.total, 0);
@@ -476,9 +536,10 @@ const AdminDashboard = memo(() => {
       ? ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100 
       : (avgOrderValue > 0 ? 100 : 0);
 
-    // Payment status - count anything not "paid" as unpaid
+    // Payment status - count by status type
     const paidOrders = filteredOrders.filter(o => o.payment_status === "paid").length;
-    const unpaidOrders = filteredOrders.filter(o => o.payment_status !== "paid").length;
+    const depositPaidOrders = filteredOrders.filter(o => o.payment_status === "deposit_paid").length;
+    const unpaidOrders = filteredOrders.filter(o => o.payment_status === "pending" || !o.payment_status).length;
 
     return {
       revenueChartData,
@@ -492,9 +553,16 @@ const AdminDashboard = memo(() => {
       avgOrderValue,
       avgOrderChange,
       paidOrders,
+      depositPaidOrders,
       unpaidOrders,
     };
   }, [orders, menuItems, analyticsPeriod]);
+
+  // Filter categories to only show ones that have at least 1 item
+  const categoriesWithItems = useMemo(() => {
+    const categorySlugsWithItems = new Set(menuItems.map(item => item.category));
+    return categories.filter(cat => categorySlugsWithItems.has(cat.slug));
+  }, [categories, menuItems]);
 
   const getAuthHeaders = useCallback(() => {
     const token = sessionStorage.getItem("admin_token");
@@ -606,6 +674,39 @@ const AdminDashboard = memo(() => {
     navigate("/joy-manage-2024", { replace: true });
   }, [navigate]);
 
+  // Inactivity timeout - logout after 1 hour of no activity
+  useEffect(() => {
+    const INACTIVITY_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        console.log("Logging out due to inactivity");
+        handleLogout();
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    // Events that indicate user activity
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+
+    // Add event listeners
+    activityEvents.forEach(event => {
+      document.addEventListener(event, resetTimer, { passive: true });
+    });
+
+    // Start the initial timer
+    resetTimer();
+
+    // Cleanup
+    return () => {
+      clearTimeout(timeoutId);
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [handleLogout]);
+
   const confirmLogout = useCallback(() => {
     setShowLogoutDialog(true);
   }, []);
@@ -681,6 +782,46 @@ const AdminDashboard = memo(() => {
       console.error("Error fetching devices:", error);
     }
   }, [getAuthHeaders]);
+
+  // ============================================
+  // STORAGE & MAINTENANCE FUNCTIONS
+  // ============================================
+
+  const fetchStorageUsage = useCallback(async () => {
+    setIsLoadingStorage(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/storage`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setStorageUsage(data.storage);
+      }
+    } catch (error) {
+      console.error("Error fetching storage:", error);
+    } finally {
+      setIsLoadingStorage(false);
+    }
+  }, [getAuthHeaders]);
+
+  const runCleanup = useCallback(async () => {
+    setIsRunningCleanup(true);
+    setCleanupResult(null);
+    try {
+      const res = await fetch(`${API_URL}/admin/maintenance/cleanup`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ monthsOld: parseInt(cleanupMonths) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCleanupResult(data.result);
+        setStorageUsage(data.storage);
+      }
+    } catch (error) {
+      console.error("Error running cleanup:", error);
+    } finally {
+      setIsRunningCleanup(false);
+    }
+  }, [getAuthHeaders, cleanupMonths]);
 
   // ============================================
   // MENU MANAGEMENT FUNCTIONS
@@ -1079,6 +1220,13 @@ const AdminDashboard = memo(() => {
     }
   }, [activeTab, fetchMenu]);
 
+  // Fetch storage usage when switching to analytics tab
+  useEffect(() => {
+    if (activeTab === "analytics") {
+      fetchStorageUsage();
+    }
+  }, [activeTab, fetchStorageUsage]);
+
   const updateOrderStatus = useCallback(
     async (orderId: string, status: string) => {
       try {
@@ -1107,6 +1255,22 @@ const AdminDashboard = memo(() => {
         fetchData();
       } catch (error) {
         console.error("Error updating payment:", error);
+      }
+    },
+    [getAuthHeaders, fetchData]
+  );
+
+  const updatePaymentStatus = useCallback(
+    async (orderId: string, status: string, balanceMethod?: string) => {
+      try {
+        await fetch(`${API_URL}/admin/orders/${orderId}/payment-status`, {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ status, balanceMethod }),
+        });
+        fetchData();
+      } catch (error) {
+        console.error("Error updating payment status:", error);
       }
     },
     [getAuthHeaders, fetchData]
@@ -1194,7 +1358,7 @@ const AdminDashboard = memo(() => {
   );
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    return parseTimestamp(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -1202,7 +1366,7 @@ const AdminDashboard = memo(() => {
   };
 
   const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString("en-US", {
+    return parseTimestamp(dateStr).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
     });
@@ -1406,7 +1570,7 @@ const AdminDashboard = memo(() => {
               <nav className="flex lg:flex-col gap-2">
                 <Button
                   variant={activeTab === "analytics" ? "default" : "ghost"}
-                  onClick={() => setActiveTab("analytics")}
+                  onClick={() => { setActiveTab("analytics"); fetchData(); }}
                   className="justify-start gap-3 w-full"
                 >
                   <BarChart3 className="w-4 h-4" />
@@ -1414,7 +1578,7 @@ const AdminDashboard = memo(() => {
                 </Button>
                 <Button
                   variant={activeTab === "orders" ? "default" : "ghost"}
-                  onClick={() => setActiveTab("orders")}
+                  onClick={() => { setActiveTab("orders"); fetchData(); }}
                   className="justify-start gap-3 w-full"
                 >
                   <Package className="w-4 h-4" />
@@ -1423,7 +1587,7 @@ const AdminDashboard = memo(() => {
                 </Button>
                 <Button
                   variant={activeTab === "messages" ? "default" : "ghost"}
-                  onClick={() => setActiveTab("messages")}
+                  onClick={() => { setActiveTab("messages"); fetchData(); }}
                   className="justify-start gap-3 w-full"
                 >
                   <MessageSquare className="w-4 h-4" />
@@ -1434,7 +1598,7 @@ const AdminDashboard = memo(() => {
                 </Button>
                 <Button
                   variant={activeTab === "devices" ? "default" : "ghost"}
-                  onClick={() => setActiveTab("devices")}
+                  onClick={() => { setActiveTab("devices"); fetchData(); }}
                   className="justify-start gap-3 w-full"
                 >
                   <Smartphone className="w-4 h-4" />
@@ -1442,7 +1606,7 @@ const AdminDashboard = memo(() => {
                 </Button>
                 <Button
                   variant={activeTab === "menu" ? "default" : "ghost"}
-                  onClick={() => setActiveTab("menu")}
+                  onClick={() => { setActiveTab("menu"); fetchData(); }}
                   className="justify-start gap-3 w-full"
                 >
                   <UtensilsCrossed className="w-4 h-4" />
@@ -1481,16 +1645,22 @@ const AdminDashboard = memo(() => {
                             statusColors[order.order_status]
                           }`}
                         >
-                          {order.order_status}
+                          {statusLabels[order.order_status] || order.order_status}
                         </span>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
                             order.payment_status === "paid"
                               ? "bg-green-100 text-green-800"
+                              : order.payment_status === "deposit_paid"
+                              ? "bg-blue-100 text-blue-800"
                               : "bg-yellow-100 text-yellow-800"
                           }`}
                         >
-                          {order.payment_status === "paid" ? "💰 Paid" : "⏳ Unpaid"}
+                          {order.payment_status === "paid" 
+                            ? "💰 Fully Paid" 
+                            : order.payment_status === "deposit_paid"
+                            ? "💳 Deposit Paid"
+                            : "⏳ Unpaid"}
                         </span>
                       </div>
                       <p className="text-sm text-gray-500">
@@ -1501,6 +1671,31 @@ const AdminDashboard = memo(() => {
                       <p className="text-2xl font-bold text-primary">
                         ${order.total.toFixed(2)}
                       </p>
+                      {/* Payment Breakdown */}
+                      {order.deposit_amount > 0 && (
+                        <div className="text-xs mt-1 space-y-0.5">
+                          <p className="text-green-600">
+                            ✓ Deposit: ${order.deposit_amount.toFixed(2)} ({order.deposit_method || order.payment_method})
+                          </p>
+                          {order.payment_status === "paid" ? (
+                            <p className="text-green-600">
+                              ✓ Balance: ${(order.total - order.deposit_amount).toFixed(2)} ({order.balance_method || 'Paid'})
+                            </p>
+                          ) : order.remaining_balance > 0 && (
+                            <p className="text-amber-600">
+                              ○ Due: ${order.remaining_balance.toFixed(2)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {/* Show payment method for orders without deposit */}
+                      {order.deposit_amount === 0 && order.payment_status === "paid" && order.balance_method && (
+                        <div className="text-xs mt-1">
+                          <p className="text-green-600">
+                            ✓ Paid: ${order.total.toFixed(2)} ({order.balance_method})
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1547,30 +1742,45 @@ const AdminDashboard = memo(() => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="confirmed">Confirmed</SelectItem>
-                        <SelectItem value="ready">Ready</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        <SelectItem value="pending">⏳ Pending</SelectItem>
+                        <SelectItem value="ready">✅ Ready</SelectItem>
+                        <SelectItem value="picked_up">📦 Picked Up</SelectItem>
+                        <SelectItem value="cancelled">❌ Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
 
-                    <Button
-                      variant={order.payment_status === "paid" ? "outline" : "default"}
-                      size="sm"
-                      onClick={() => togglePaid(order.id, order.payment_status)}
-                      className="gap-1"
+                    {/* Payment Status Control */}
+                    <Select
+                      value={order.payment_status === "paid" 
+                        ? `paid_${order.balance_method || 'Cash'}` 
+                        : order.payment_status}
+                      onValueChange={(value) => {
+                        if (value.startsWith('paid_')) {
+                          const method = value.replace('paid_', '');
+                          updatePaymentStatus(order.id, 'paid', method);
+                        } else {
+                          updatePaymentStatus(order.id, value);
+                        }
+                      }}
                     >
-                      {order.payment_status === "paid" ? (
-                        <>
-                          <X className="w-4 h-4" /> Mark Unpaid
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4" /> Mark Paid
-                        </>
-                      )}
-                    </Button>
+                      <SelectTrigger className={`w-[180px] ${
+                        order.payment_status === "paid" 
+                          ? "bg-green-50 border-green-200" 
+                          : order.payment_status === "deposit_paid"
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-yellow-50 border-yellow-200"
+                      }`}>
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">⏳ Unpaid</SelectItem>
+                        <SelectItem value="deposit_paid">💳 Deposit Paid</SelectItem>
+                        <SelectItem value="paid_Cash">💰 Paid (Cash)</SelectItem>
+                        <SelectItem value="paid_PayPal">💰 Paid (PayPal)</SelectItem>
+                        <SelectItem value="paid_Venmo">💰 Paid (Venmo)</SelectItem>
+                      </SelectContent>
+                    </Select>
 
                     <Button
                       variant="ghost"
@@ -1757,9 +1967,9 @@ const AdminDashboard = memo(() => {
                           <div className="text-sm text-gray-500 space-y-1">
                             <p>{device.browser_info || 'Unknown browser'}</p>
                             <p className="text-xs">
-                              Registered: {new Date(device.created_at).toLocaleDateString()} via {device.registered_via}
+                              Registered: {parseTimestamp(device.created_at).toLocaleDateString()} via {device.registered_via}
                               {device.last_used && (
-                                <> • Last used: {new Date(device.last_used).toLocaleDateString()}</>
+                                <> • Last used: {parseTimestamp(device.last_used).toLocaleDateString()}</>
                               )}
                             </p>
                           </div>
@@ -1806,10 +2016,10 @@ const AdminDashboard = memo(() => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Items</SelectItem>
-                      {categories.map((cat) => (
+                      {categoriesWithItems.map((cat) => (
                         <SelectItem key={cat.id} value={cat.slug}>{cat.name}</SelectItem>
                       ))}
-                      {categories.length === 0 && (
+                      {categoriesWithItems.length === 0 && (
                         <>
                           <SelectItem value="cookies">Cookies</SelectItem>
                           <SelectItem value="cupcakes">Cupcakes</SelectItem>
@@ -2181,16 +2391,18 @@ const AdminDashboard = memo(() => {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-500">Payment Rate</p>
+                        <p className="text-sm text-gray-500">Payment Status</p>
                         <p className="text-2xl font-bold">
-                          {analyticsData.paidOrders + analyticsData.unpaidOrders > 0
-                            ? ((analyticsData.paidOrders / (analyticsData.paidOrders + analyticsData.unpaidOrders)) * 100).toFixed(0)
+                          {analyticsData.paidOrders + analyticsData.depositPaidOrders + analyticsData.unpaidOrders > 0
+                            ? (((analyticsData.paidOrders + analyticsData.depositPaidOrders) / (analyticsData.paidOrders + analyticsData.depositPaidOrders + analyticsData.unpaidOrders)) * 100).toFixed(0)
                             : 0}%
                         </p>
+                        <p className="text-xs text-gray-400">deposits received</p>
                       </div>
-                      <div className="flex gap-2 text-xs">
-                        <span className="text-green-600">{analyticsData.paidOrders} paid</span>
-                        <span className="text-yellow-600">{analyticsData.unpaidOrders} unpaid</span>
+                      <div className="flex flex-col gap-1 text-xs text-right">
+                        <span className="text-green-600">✓ {analyticsData.paidOrders} fully paid</span>
+                        <span className="text-blue-600">◐ {analyticsData.depositPaidOrders} deposit</span>
+                        <span className="text-yellow-600">○ {analyticsData.unpaidOrders} unpaid</span>
                       </div>
                     </div>
                   </motion.div>
@@ -2408,6 +2620,169 @@ const AdminDashboard = memo(() => {
                 </motion.div>
               </>
             )}
+
+            {/* Storage & Maintenance Section */}
+            <div className="mt-8">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Storage & Maintenance
+              </h2>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Storage Usage Card */}
+                <motion.div
+                  className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-indigo-500" />
+                      Database Storage
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={fetchStorageUsage}
+                      disabled={isLoadingStorage}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoadingStorage ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                  
+                  {isLoadingStorage ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    </div>
+                  ) : storageUsage ? (
+                    <div className="space-y-4">
+                      {/* Server Disk Space */}
+                      {storageUsage.diskSpace && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Server Disk</span>
+                            <span>{storageUsage.diskSpace.usedPercent}% used</span>
+                          </div>
+                          <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <motion.div
+                              className={`absolute inset-y-0 left-0 rounded-full ${
+                                storageUsage.diskSpace.usedPercent > 90 ? 'bg-red-500' :
+                                storageUsage.diskSpace.usedPercent > 75 ? 'bg-amber-500' :
+                                'bg-gradient-to-r from-green-400 to-emerald-500'
+                              }`}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${storageUsage.diskSpace.usedPercent}%` }}
+                              transition={{ duration: 1, ease: "easeOut" }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-600">
+                              {formatBytes(storageUsage.diskSpace.free)} free
+                            </span>
+                            <span className="text-gray-800 font-medium">
+                              {formatBytes(storageUsage.diskSpace.total)} total
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Database Size */}
+                      <div className="bg-indigo-50 rounded-lg p-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-indigo-700">Database Size</span>
+                          <span className="text-lg font-bold text-indigo-600">
+                            {storageUsage.formattedSize}
+                          </span>
+                        </div>
+                        {storageUsage.diskSpace && (
+                          <p className="text-xs text-indigo-500 mt-1">
+                            {((storageUsage.totalSize / storageUsage.diskSpace.total) * 100).toFixed(4)}% of server disk
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Table Counts */}
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {Object.entries(storageUsage.tableCounts)
+                          .filter(([name]) => ['orders', 'products', 'contact_messages', 'order_analytics'].includes(name))
+                          .map(([name, count]) => (
+                            <div key={name} className="flex justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                              <span className="text-gray-600 capitalize">{name.replace('_', ' ')}</span>
+                              <span className="font-medium text-gray-800">{count.toLocaleString()}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">Unable to load storage info</p>
+                  )}
+                </motion.div>
+
+                {/* Cleanup Card */}
+                <motion.div
+                  className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <h3 className="font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                    <Trash2 className="w-4 h-4 text-amber-500" />
+                    Data Cleanup
+                  </h3>
+                  
+                  <p className="text-sm text-gray-600 mb-4">
+                    Aggregate old orders into summaries and delete detailed data. 
+                    Analytics will be preserved!
+                  </p>
+                  
+                  <div className="flex items-center gap-3 mb-4">
+                    <Label className="text-sm whitespace-nowrap">Delete orders older than:</Label>
+                    <Select value={cleanupMonths} onValueChange={setCleanupMonths}>
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 months</SelectItem>
+                        <SelectItem value="6">6 months</SelectItem>
+                        <SelectItem value="12">12 months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <Button
+                    onClick={() => setShowCleanupDialog(true)}
+                    variant="outline"
+                    className="w-full border-amber-200 text-amber-700 hover:bg-amber-50"
+                    disabled={isRunningCleanup}
+                  >
+                    {isRunningCleanup ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Running Cleanup...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Run Cleanup
+                      </>
+                    )}
+                  </Button>
+                  
+                  {cleanupResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200"
+                    >
+                      <p className="text-sm text-green-700 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Aggregated {cleanupResult.aggregated} months, deleted {cleanupResult.deleted} orders
+                      </p>
+                    </motion.div>
+                  )}
+                </motion.div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2511,13 +2886,13 @@ const AdminDashboard = memo(() => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {categoriesWithItems.map((cat) => (
                           <SelectItem key={cat.id} value={cat.slug}>
                             {cat.name}
                           </SelectItem>
                         ))}
                         {/* Fallback if no categories loaded */}
-                        {categories.length === 0 && (
+                        {categoriesWithItems.length === 0 && (
                           <>
                             <SelectItem value="cookies">Cookies</SelectItem>
                             <SelectItem value="cupcakes">Cupcakes</SelectItem>
@@ -2552,13 +2927,13 @@ const AdminDashboard = memo(() => {
                       <p className="text-sm text-gray-500 mt-2">Uploading...</p>
                     </div>
                   ) : uploadedImagePreview || newItemForm.image_path ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2 overflow-hidden">
                       <img 
                         src={uploadedImagePreview || getImageUrl(newItemForm.image_path) || ''} 
                         alt="Preview" 
                         className="w-24 h-24 object-cover rounded-lg mx-auto"
                       />
-                      <p className="text-xs text-gray-500 truncate">{newItemForm.image_path}</p>
+                      <p className="text-xs text-gray-500 truncate max-w-full px-2">{newItemForm.image_path}</p>
                       <Button 
                         type="button" 
                         variant="outline" 
@@ -2726,12 +3101,12 @@ const AdminDashboard = memo(() => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {categoriesWithItems.map((cat) => (
                           <SelectItem key={cat.id} value={cat.slug}>
                             {cat.name}
                           </SelectItem>
                         ))}
-                        {categories.length === 0 && (
+                        {categoriesWithItems.length === 0 && (
                           <>
                             <SelectItem value="cookies">Cookies</SelectItem>
                             <SelectItem value="cupcakes">Cupcakes</SelectItem>
@@ -2766,13 +3141,13 @@ const AdminDashboard = memo(() => {
                       <p className="text-sm text-gray-500 mt-2">Uploading...</p>
                     </div>
                   ) : editImagePreview || editItemForm.image_path ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2 overflow-hidden">
                       <img 
                         src={editImagePreview || getImageUrl(editItemForm.image_path) || ''} 
                         alt="Preview" 
                         className="w-24 h-24 object-cover rounded-lg mx-auto"
                       />
-                      <p className="text-xs text-gray-500 truncate">{editItemForm.image_path}</p>
+                      <p className="text-xs text-gray-500 truncate max-w-full px-2">{editItemForm.image_path}</p>
                       <label className="cursor-pointer">
                         <Button type="button" variant="outline" size="sm" asChild>
                           <span>Change Image</span>
@@ -3062,6 +3437,45 @@ const AdminDashboard = memo(() => {
                     <Mail className="w-4 h-4 mr-2" />
                     Send Reply
                   </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Cleanup Confirmation Dialog */}
+        <Dialog open={showCleanupDialog} onOpenChange={setShowCleanupDialog}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-amber-600" />
+                Confirm Data Cleanup
+              </DialogTitle>
+              <DialogDescription>
+                This will aggregate orders older than {cleanupMonths} months into monthly summaries 
+                and delete the detailed order data. Analytics will be preserved. 
+                This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setShowCleanupDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={() => {
+                  setShowCleanupDialog(false);
+                  runCleanup();
+                }}
+                disabled={isRunningCleanup}
+              >
+                {isRunningCleanup ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  "Yes, Run Cleanup"
                 )}
               </Button>
             </DialogFooter>

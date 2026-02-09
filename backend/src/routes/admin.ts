@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
-import db from '../db/database';
+import db, { getStorageUsage, aggregateOldOrders, getHistoricalAnalytics } from '../db/database';
 import { AppError } from '../middleware/errorHandler';
 import { authenticateAdmin } from '../middleware/auth';
-import { sendReplyEmail } from '../services/email';
+import { sendReplyEmail, sendReadyForPickupNotification } from '../services/email';
 
 const router = Router();
 
@@ -95,7 +95,7 @@ router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction
 // Update order status
 router.patch(
   '/orders/:id/status',
-  body('status').isIn(['pending', 'confirmed', 'ready', 'completed', 'cancelled']),
+  body('status').isIn(['pending', 'ready', 'picked_up', 'cancelled']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
@@ -112,16 +112,41 @@ router.patch(
         throw new AppError('Order not found', 404);
       }
 
-      db.prepare('UPDATE orders SET order_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+      const nowUTC = new Date().toISOString();
+      db.prepare('UPDATE orders SET order_status = ?, updated_at = ? WHERE id = ?').run(
         status,
+        nowUTC,
         id
       );
 
-      console.log(`📦 Order ${order.order_number} status updated to: ${status}`);
+      // Send email notification when order is ready for pickup
+      if (status === 'ready') {
+        sendReadyForPickupNotification({
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerEmail: order.customer_email,
+          pickupDate: order.pickup_date,
+          pickupTime: order.pickup_time,
+          total: order.total,
+          remainingBalance: order.remaining_balance,
+        }).catch((err) => {
+          console.error('Failed to send ready notification:', err);
+        });
+      }
+
+      const statusLabels: Record<string, string> = {
+        pending: 'Pending',
+        ready: 'Ready for Pickup',
+        picked_up: 'Picked Up',
+        cancelled: 'Cancelled',
+      };
+
+      console.log(`📦 Order ${order.order_number} status updated to: ${statusLabels[status] || status}`);
 
       res.json({
         success: true,
-        message: `Order status updated to ${status}`,
+        message: `Order status updated to ${statusLabels[status] || status}`,
+        emailSent: status === 'ready',
       });
     } catch (error) {
       next(error);
@@ -142,8 +167,10 @@ router.patch('/orders/:id/paid', async (req: Request, res: Response, next: NextF
     }
 
     const paymentStatus = paid ? 'paid' : 'pending';
-    db.prepare('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    const nowUTC = new Date().toISOString();
+    db.prepare('UPDATE orders SET payment_status = ?, updated_at = ? WHERE id = ?').run(
       paymentStatus,
+      nowUTC,
       id
     );
 
@@ -152,6 +179,63 @@ router.patch('/orders/:id/paid', async (req: Request, res: Response, next: NextF
     res.json({
       success: true,
       message: paid ? 'Order marked as paid' : 'Order marked as unpaid',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update payment status (pending, deposit_paid, paid)
+router.patch('/orders/:id/payment-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { status, balanceMethod } = req.body;
+
+    if (!['pending', 'deposit_paid', 'paid'].includes(status)) {
+      throw new AppError('Invalid payment status', 400);
+    }
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
+
+    if (!order) {
+      throw new AppError('Order not found', 404);
+    }
+
+    // If marking as fully paid and a balance method is provided, save it
+    const nowUTC = new Date().toISOString();
+    if (status === 'paid' && balanceMethod) {
+      db.prepare(`
+        UPDATE orders 
+        SET payment_status = ?, balance_method = ?, remaining_balance = 0, updated_at = ? 
+        WHERE id = ?
+      `).run(status, balanceMethod, nowUTC, id);
+    } else if (status === 'paid') {
+      // Default to 'Cash' if no method specified when marking as paid
+      db.prepare(`
+        UPDATE orders 
+        SET payment_status = ?, balance_method = 'Cash', remaining_balance = 0, updated_at = ? 
+        WHERE id = ?
+      `).run(status, nowUTC, id);
+    } else {
+      db.prepare('UPDATE orders SET payment_status = ?, updated_at = ? WHERE id = ?').run(
+        status,
+        nowUTC,
+        id
+      );
+    }
+
+    const statusLabels: Record<string, string> = {
+      pending: 'Unpaid',
+      deposit_paid: 'Deposit Paid',
+      paid: 'Fully Paid',
+    };
+
+    const methodInfo = status === 'paid' && balanceMethod ? ` (${balanceMethod})` : status === 'paid' ? ' (Cash)' : '';
+    console.log(`💰 Order ${order.order_number} payment status: ${statusLabels[status]}${methodInfo}`);
+
+    res.json({
+      success: true,
+      message: `Payment status updated to ${statusLabels[status]}`,
     });
   } catch (error) {
     next(error);
@@ -195,14 +279,14 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
       .prepare('SELECT COUNT(*) as total FROM orders WHERE DATE(created_at) = ?')
       .get(today) as any;
 
-    // Total revenue
+    // Total revenue (from fully paid and deposit paid orders)
     const { total: totalRevenue } = db
-      .prepare("SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE payment_status = 'paid'")
+      .prepare("SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE payment_status IN ('paid', 'deposit_paid')")
       .get() as any;
 
-    // Today's revenue
+    // Today's revenue (from fully paid and deposit paid orders)
     const { total: todayRevenue } = db
-      .prepare("SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE payment_status = 'paid' AND DATE(created_at) = ?")
+      .prepare("SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE payment_status IN ('paid', 'deposit_paid') AND DATE(created_at) = ?")
       .get(today) as any;
 
     // Pending orders
@@ -368,7 +452,8 @@ router.post(
       }
 
       // Mark message as read and set replied_at after replying
-      db.prepare('UPDATE contact_messages SET is_read = 1, replied_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+      const nowUTC = new Date().toISOString();
+      db.prepare('UPDATE contact_messages SET is_read = 1, replied_at = ? WHERE id = ?').run(nowUTC, id);
 
       console.log(`📧 Reply sent to ${message.email} for message from ${message.name}`);
 
@@ -381,5 +466,60 @@ router.post(
     }
   }
 );
+
+// ==================== STORAGE & MAINTENANCE ====================
+
+// Get storage usage statistics
+router.get('/storage', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const usage = getStorageUsage();
+    
+    res.json({
+      success: true,
+      storage: usage,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Aggregate old orders and clean up (manual trigger)
+router.post('/maintenance/cleanup', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const monthsOld = parseInt(req.body.monthsOld as string) || 6;
+    
+    if (monthsOld < 1 || monthsOld > 24) {
+      throw new AppError('monthsOld must be between 1 and 24', 400);
+    }
+    
+    const result = aggregateOldOrders(monthsOld);
+    
+    // Get updated storage after cleanup
+    const storage = getStorageUsage();
+    
+    res.json({
+      success: true,
+      message: `Aggregated ${result.aggregated} months of data, deleted ${result.deleted} old orders`,
+      result,
+      storage,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get historical analytics (aggregated data)
+router.get('/analytics/historical', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const historicalData = getHistoricalAnalytics();
+    
+    res.json({
+      success: true,
+      analytics: historicalData,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

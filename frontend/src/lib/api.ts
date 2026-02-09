@@ -22,6 +22,13 @@ interface OrderItem {
   category: string;
 }
 
+interface PaymentDetails {
+  transactionId: string;
+  paymentMethod: string;
+  payerEmail?: string;
+  depositPaid: boolean;
+}
+
 interface OrderData {
   customerName: string;
   customerEmail: string;
@@ -30,6 +37,9 @@ interface OrderData {
   pickupTime: string;
   items: OrderItem[];
   total: number;
+  depositAmount?: number;
+  remainingBalance?: number;
+  paymentDetails?: PaymentDetails;
 }
 
 interface OrderResponse {
@@ -81,6 +91,32 @@ export async function getOrder(orderNumber: string) {
 
   if (!response.ok) {
     throw new Error((data as ApiError).message || 'Order not found');
+  }
+
+  return data;
+}
+
+// Pay remaining balance for an order
+export async function payRemainingBalance(
+  orderNumber: string,
+  paymentDetails: {
+    transactionId: string;
+    paymentMethod: string;
+    payerEmail?: string;
+  }
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/orders/${orderNumber}/pay-balance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(paymentDetails),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error((data as ApiError).message || 'Failed to process payment');
   }
 
   return data;

@@ -98,6 +98,7 @@ import saltedCaramelCupcake from "@/assets/cupcakes/Salted Caramel Cupcake.webp"
 import funfettiCupcake from "@/assets/cupcakes/Funfetti Cupcake.webp";
 import chocolateCakePop from "@/assets/cakepops/Chocolate Cake Pop.webp";
 import vanillaCakePop from "@/assets/cakepops/Vanilla Cake Pop.webp";
+import SeasonalThemesManager from "@/components/SeasonalThemesManager";
 
 // Map image paths to imported images
 const imageMap: Record<string, string> = {
@@ -315,7 +316,7 @@ const AdminDashboard = memo(() => {
   
   // Add item dialog state
   const [showAddItemDialog, setShowAddItemDialog] = useState(false);
-  const [newItemForm, setNewItemForm] = useState({ name: "", description: "", price: "", category: "cookies", image_path: "" });
+  const [newItemForm, setNewItemForm] = useState({ name: "", description: "", price: "", category: "cookies", image_path: "", is_box: false, box_category: "cookies", box_size: "6" });
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null);
@@ -936,13 +937,16 @@ const AdminDashboard = memo(() => {
           price: parseFloat(newItemForm.price),
           category: newItemForm.category,
           image_path: newItemForm.image_path,
+          is_box: newItemForm.is_box,
+          box_category: newItemForm.is_box ? newItemForm.box_category : null,
+          box_size: newItemForm.is_box ? parseInt(newItemForm.box_size) : null,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setMenuItems(prev => [...prev, data.product]);
         setShowAddItemDialog(false);
-        setNewItemForm({ name: "", description: "", price: "", category: "cookies", image_path: "" });
+        setNewItemForm({ name: "", description: "", price: "", category: "cookies", image_path: "", is_box: false, box_category: "cookies", box_size: "6" });
         setUploadedImagePreview(null);
       }
     } catch (error) {
@@ -1721,13 +1725,29 @@ const AdminDashboard = memo(() => {
                     <p className="text-xs text-gray-500 mb-2">Items</p>
                     <div className="space-y-1">
                       {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span>
-                            {item.name} × {item.quantity}
-                          </span>
-                          <span className="text-gray-600">
-                            ${(item.price * item.quantity).toFixed(2)}
-                          </span>
+                        <div key={idx} className="text-sm">
+                          <div className="flex justify-between">
+                            <span>
+                              {item.name} × {item.quantity}
+                            </span>
+                            <span className="text-gray-600">
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                          {/* Display box items if this is a box product */}
+                          {item.isBox && item.boxItems && item.boxItems.length > 0 && (
+                            <p className="text-xs text-primary ml-2 mt-0.5">
+                              Contains: {(() => {
+                                const counts = item.boxItems.reduce((acc: Record<string, number>, bi: { id: string; name: string }) => {
+                                  acc[bi.name] = (acc[bi.name] || 0) + 1;
+                                  return acc;
+                                }, {});
+                                return Object.entries(counts)
+                                  .map(([name, count]) => count > 1 ? `${name} ×${count}` : name)
+                                  .join(', ');
+                              })()}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1997,6 +2017,9 @@ const AdminDashboard = memo(() => {
         {/* Menu Tab */}
         {activeTab === "menu" && (
           <div className="space-y-4">
+            {/* Seasonal Themes Section */}
+            <SeasonalThemesManager categories={categories} />
+            
             <div className="bg-white rounded-xl shadow-sm border p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Menu Management</h2>
@@ -2886,13 +2909,13 @@ const AdminDashboard = memo(() => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {categoriesWithItems.map((cat) => (
+                        {categories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.slug}>
                             {cat.name}
                           </SelectItem>
                         ))}
                         {/* Fallback if no categories loaded */}
-                        {categoriesWithItems.length === 0 && (
+                        {categories.length === 0 && (
                           <>
                             <SelectItem value="cookies">Cookies</SelectItem>
                             <SelectItem value="cupcakes">Cupcakes</SelectItem>
@@ -2909,6 +2932,70 @@ const AdminDashboard = memo(() => {
                   )}
                 </div>
               </div>
+
+              {/* Box Configuration */}
+              <div className="space-y-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="new-item-is-box"
+                    checked={newItemForm.is_box}
+                    onChange={(e) => setNewItemForm(prev => ({ ...prev, is_box: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <Label htmlFor="new-item-is-box" className="text-sm font-medium cursor-pointer">
+                    This is a "Build Your Own Box" product
+                  </Label>
+                </div>
+                {newItemForm.is_box && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="new-box-category" className="text-xs">Items Category</Label>
+                      <Select 
+                        value={newItemForm.box_category} 
+                        onValueChange={(v) => setNewItemForm(prev => ({ ...prev, box_category: v }))}
+                      >
+                        <SelectTrigger id="new-box-category" className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {/* Show all categories except the selected product category and boxes */}
+                          {categoriesWithItems
+                            .filter(cat => cat.slug !== newItemForm.category && cat.slug !== 'boxes')
+                            .map((cat) => (
+                              <SelectItem key={cat.id} value={cat.slug}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          {/* Fallback if no categories loaded */}
+                          {categoriesWithItems.filter(cat => cat.slug !== newItemForm.category && cat.slug !== 'boxes').length === 0 && (
+                            <>
+                              {newItemForm.category !== 'cookies' && <SelectItem value="cookies">Cookies</SelectItem>}
+                              {newItemForm.category !== 'cupcakes' && <SelectItem value="cupcakes">Cupcakes</SelectItem>}
+                              {newItemForm.category !== 'cakepops' && <SelectItem value="cakepops">Cake Pops</SelectItem>}
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">Category of items customers can choose</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="new-box-size" className="text-xs">Box Size</Label>
+                      <Input
+                        id="new-box-size"
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={newItemForm.box_size}
+                        onChange={(e) => setNewItemForm(prev => ({ ...prev, box_size: e.target.value }))}
+                        className="h-9"
+                      />
+                      <p className="text-xs text-gray-500">Number of items in the box</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label>Product Image</Label>
                 <div
@@ -3101,12 +3188,12 @@ const AdminDashboard = memo(() => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {categoriesWithItems.map((cat) => (
+                        {categories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.slug}>
                             {cat.name}
                           </SelectItem>
                         ))}
-                        {categoriesWithItems.length === 0 && (
+                        {categories.length === 0 && (
                           <>
                             <SelectItem value="cookies">Cookies</SelectItem>
                             <SelectItem value="cupcakes">Cupcakes</SelectItem>

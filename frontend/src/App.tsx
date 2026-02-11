@@ -5,8 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/components/CartContext";
 import { ProductProvider } from "@/components/ProductContext";
+import { SeasonalThemeProvider } from "@/components/SeasonalThemeContext";
 import ScrollToTop from "@/components/ScrollToTop";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import SeasonalThemeOverlay from "@/components/SeasonalThemeOverlay";
 import Index from "./pages/Index";
 import ProductPage from "./pages/ProductPage";
 import Checkout from "./pages/Checkout";
@@ -31,26 +33,29 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <ScrollToTop />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/product/:id" element={<ProductPage />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/payment" element={<Payment />} />
-              <Route path="/confirmation" element={<Confirmation />} />
-              <Route path="/pay-balance" element={<PayBalance />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/about" element={<About />} />
-              {/* Admin Routes - SECRET URLs */}
-              <Route path="/joy-manage-2024" element={<AdminLogin />} />
-              <Route path="/joy-manage-2024/dashboard" element={<AdminDashboard />} />
-              <Route path="/joy-setup-device" element={<AdminSetup />} />
-              {/* Old admin URL redirects to 404 */}
-              <Route path="/admin" element={<NotFound />} />
-              <Route path="/admin/*" element={<NotFound />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <SeasonalThemeProvider>
+              <SeasonalThemeOverlay />
+              <ScrollToTop />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/product/:id" element={<ProductPage />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/payment" element={<Payment />} />
+                <Route path="/confirmation" element={<Confirmation />} />
+                <Route path="/pay-balance" element={<PayBalance />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/about" element={<About />} />
+                {/* Admin Routes - SECRET URLs */}
+                <Route path="/joy-manage-2024" element={<AdminLogin />} />
+                <Route path="/joy-manage-2024/dashboard" element={<AdminDashboard />} />
+                <Route path="/joy-setup-device" element={<AdminSetup />} />
+                {/* Old admin URL redirects to 404 */}
+                <Route path="/admin" element={<NotFound />} />
+                <Route path="/admin/*" element={<NotFound />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </SeasonalThemeProvider>
           </BrowserRouter>
         </ErrorBoundary>
       </CartProvider>

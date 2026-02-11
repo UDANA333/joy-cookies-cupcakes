@@ -14,12 +14,19 @@ function getApiBaseUrl() {
 
 const API_BASE_URL = getApiBaseUrl();
 
+interface BoxItem {
+  id: string;
+  name: string;
+}
+
 interface OrderItem {
   id: string;
   name: string;
   price: number;
   quantity: number;
   category: string;
+  isBox?: boolean;
+  boxItems?: BoxItem[];
 }
 
 interface PaymentDetails {
@@ -151,6 +158,9 @@ export interface Product {
   image_path: string;
   is_available: number;
   display_order: number;
+  is_box?: number;
+  box_category?: string | null;
+  box_size?: number | null;
 }
 
 // Fetch available products from API
@@ -164,5 +174,69 @@ export async function fetchProducts(): Promise<Product[]> {
   } catch (error) {
     console.error('Error fetching products:', error);
     throw error;
+  }
+}
+
+// ============================================
+// SEASONAL THEMES API
+// ============================================
+
+export interface SeasonalTheme {
+  id: string;
+  name: string;
+  slug: string;
+  category_slug: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  icon: string;
+  banner_text: string | null;
+  banner_subtext: string | null;
+  is_active: number;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeasonalPreset {
+  name: string;
+  icon: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  banner_text: string;
+  banner_subtext: string;
+}
+
+export interface ActiveSeasonalData {
+  theme: SeasonalTheme | null;
+  products: Product[];
+}
+
+// Fetch active seasonal theme with products (public)
+export async function fetchActiveSeasonalTheme(): Promise<ActiveSeasonalData> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/seasonal/active`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch active seasonal theme');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching active seasonal theme:', error);
+    return { theme: null, products: [] };
+  }
+}
+
+// Fetch all seasonal themes (public)
+export async function fetchSeasonalThemes(): Promise<SeasonalTheme[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/seasonal/themes`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch seasonal themes');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching seasonal themes:', error);
+    return [];
   }
 }

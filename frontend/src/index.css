@@ -22,6 +22,14 @@ body[data-scroll-locked] {
   margin-right: 0 !important;
 }
 
+/* Seasonal banner offset - adds extra space when announcement bar is visible */
+:root {
+  --seasonal-banner-height: 0px;
+}
+body[data-seasonal-banner="true"] {
+  --seasonal-banner-height: 40px;
+}
+
 /* Joy Cookies & Cupcakes Design System
    Warm, feminine, homemade, premium but friendly
    All colors in HSL
@@ -400,4 +408,35 @@ input[type="date"]::-webkit-inner-spin-button {
   textarea {
     font-size: 16px !important;
   }
+}
+
+/* iOS Safari Animation Support */
+@-webkit-keyframes seasonal-float {
+  0% {
+    -webkit-transform: translate3d(0, -5%, 0) rotate(0deg);
+    transform: translate3d(0, -5%, 0) rotate(0deg);
+  }
+  100% {
+    -webkit-transform: translate3d(0, 105vh, 0) rotate(360deg);
+    transform: translate3d(0, 105vh, 0) rotate(360deg);
+  }
+}
+
+@keyframes seasonal-float {
+  0% {
+    -webkit-transform: translate3d(0, -5%, 0) rotate(0deg);
+    transform: translate3d(0, -5%, 0) rotate(0deg);
+  }
+  100% {
+    -webkit-transform: translate3d(0, 105vh, 0) rotate(360deg);
+    transform: translate3d(0, 105vh, 0) rotate(360deg);
+  }
+}
+
+/* Ensure iOS Safari renders animations properly */
+.will-change-transform {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }

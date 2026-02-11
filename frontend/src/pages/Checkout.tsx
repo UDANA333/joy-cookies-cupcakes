@@ -386,7 +386,7 @@ const Checkout = memo(() => {
                 <div className="space-y-3 sm:space-y-4">
                   {items.map((item, index) => (
                     <motion.div
-                      key={item.id}
+                      key={item.cartId || item.id}
                       className="bg-card rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-soft"
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -404,13 +404,28 @@ const Checkout = memo(() => {
                           <h3 className="font-semibold text-sm sm:text-base text-foreground truncate">
                             {item.name}
                           </h3>
-                          <p className="text-xs sm:text-sm text-muted-foreground">
-                            ${item.price.toFixed(2)} each
-                          </p>
+                          {item.isBox && item.boxItems && item.boxItems.length > 0 ? (
+                            <p className="text-xs text-primary mt-0.5 line-clamp-2">
+                              {/* Group and count box items */}
+                              {(() => {
+                                const counts = item.boxItems.reduce((acc, bi) => {
+                                  acc[bi.name] = (acc[bi.name] || 0) + 1;
+                                  return acc;
+                                }, {} as Record<string, number>);
+                                return Object.entries(counts)
+                                  .map(([name, count]) => count > 1 ? `${name} ×${count}` : name)
+                                  .join(', ');
+                              })()}
+                            </p>
+                          ) : (
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                              ${item.price.toFixed(2)} each
+                            </p>
+                          )}
                         </div>
                         <motion.button
                           className="p-1.5 sm:p-2 text-muted-foreground hover:text-destructive transition-colors touch-manipulation flex-shrink-0"
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => removeItem(item.cartId || item.id)}
                           whileTap={{ scale: 0.85 }}
                           aria-label="Remove item"
                         >
@@ -423,7 +438,7 @@ const Checkout = memo(() => {
                         <div className="flex items-center gap-2 bg-secondary/50 rounded-lg px-1">
                           <motion.button
                             className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground transition-colors touch-manipulation"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => updateQuantity(item.cartId || item.id, item.quantity - 1)}
                             whileTap={{ scale: 0.85 }}
                             aria-label="Decrease quantity"
                           >
@@ -434,7 +449,7 @@ const Checkout = memo(() => {
                           </span>
                           <motion.button
                             className="p-1.5 sm:p-2 text-muted-foreground hover:text-foreground transition-colors touch-manipulation"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.cartId || item.id, item.quantity + 1)}
                             whileTap={{ scale: 0.85 }}
                             aria-label="Increase quantity"
                           >

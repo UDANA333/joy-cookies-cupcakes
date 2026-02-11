@@ -10,6 +10,7 @@ import contactRoutes from './routes/contact';
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import productRoutes from './routes/products';
+import seasonalRoutes from './routes/seasonal';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -46,13 +47,22 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP in development
 }));
 
-// Rate limiting
+// Rate limiting - generous for normal use, protective against abuse
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs (generous for admin use)
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for authenticated admin requests
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Has auth token - likely admin, be more lenient
+      return true;
+    }
+    return false;
+  },
 });
 app.use(limiter);
 
@@ -101,6 +111,8 @@ app.use('/api/admin', adminRoutes);
 console.log('  ✓ /api/admin mounted');
 app.use('/api/products', productRoutes);
 console.log('  ✓ /api/products mounted');
+app.use('/api/seasonal', seasonalRoutes);
+console.log('  ✓ /api/seasonal mounted');
 
 // 404 handler
 app.use((req, res) => {

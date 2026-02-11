@@ -46,6 +46,9 @@ export interface Product {
   image: string;
   category: string;
   description: string;
+  isBox?: boolean;
+  boxCategory?: string;
+  boxSize?: number;
 }
 
 interface ProductContextType {
@@ -92,6 +95,25 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       const apiProducts = await fetchProductsAPI();
       // Map API products to include local images or uploaded images
       const mappedProducts: Product[] = apiProducts.map((p: APIProduct) => {
+        // Use is_box from API, or fallback to detection by category/name pattern
+        const isBox = p.is_box === 1 || p.category === 'boxes' || p.name.toLowerCase().includes('box');
+        let boxCategory: string | undefined = p.box_category || undefined;
+        let boxSize: number | undefined = p.box_size || undefined;
+        
+        if (isBox && !boxCategory) {
+          // Fallback: Extract box category from name (e.g., "Regular Cookie Box" -> "cookies")
+          if (p.name.toLowerCase().includes('cookie')) {
+            boxCategory = 'cookies';
+          } else if (p.name.toLowerCase().includes('cupcake')) {
+            boxCategory = 'cupcakes';
+          }
+        }
+        if (isBox && !boxSize) {
+          // Fallback: Extract box size from name (e.g., "6 Pack" -> 6)
+          const sizeMatch = p.name.match(/(\d+)\s*pack/i);
+          boxSize = sizeMatch ? parseInt(sizeMatch[1], 10) : 6;
+        }
+        
         // Check if it's a mapped asset image
         if (imageMap[p.image_path]) {
           return {
@@ -101,6 +123,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
             category: p.category,
             description: p.description,
             image: imageMap[p.image_path],
+            ...(isBox && { isBox, boxCategory, boxSize }),
           };
         }
         // Check if it's an uploaded image (starts with 'uploads/')
@@ -112,16 +135,20 @@ export function ProductProvider({ children }: { children: ReactNode }) {
             category: p.category,
             description: p.description,
             image: `/${p.image_path}`,
+            ...(isBox && { isBox, boxCategory, boxSize }),
           };
         }
         // Fallback to finding in fallback products
+        const fallbackProduct = fallbackProducts.find(fp => fp.id === p.id || fp.name === p.name);
         return {
           id: p.id,
           name: p.name,
           price: p.price,
           category: p.category,
           description: p.description,
-          image: fallbackProducts.find(fp => fp.id === p.id)?.image || '',
+          image: fallbackProduct?.image || '',
+          ...(isBox && { isBox, boxCategory, boxSize }),
+          ...(fallbackProduct?.isBox && { isBox: fallbackProduct.isBox, boxCategory: fallbackProduct.boxCategory, boxSize: fallbackProduct.boxSize }),
         };
       });
       setProducts(mappedProducts);

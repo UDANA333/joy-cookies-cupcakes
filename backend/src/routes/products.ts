@@ -49,6 +49,9 @@ interface Product {
   display_order: number;
   created_at: string;
   updated_at: string;
+  is_box: number;
+  box_category: string | null;
+  box_size: number | null;
 }
 
 interface Category {
@@ -107,7 +110,7 @@ router.get('/all', authenticateAdmin, (req, res) => {
 // POST /api/products - Create new product (admin)
 router.post('/', authenticateAdmin, (req, res) => {
   try {
-    const { name, price, category, description, image_path } = req.body;
+    const { name, price, category, description, image_path, is_box, box_category, box_size } = req.body;
     
     if (!name || typeof price !== 'number' || !category) {
       return res.status(400).json({ error: 'Name, price, and category are required' });
@@ -122,9 +125,9 @@ router.post('/', authenticateAdmin, (req, res) => {
     const id = uuidv4();
     
     db.prepare(`
-      INSERT INTO products (id, name, price, category, description, image_path, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, price, category, description || '', image_path || '', maxOrder.max_order + 1);
+      INSERT INTO products (id, name, price, category, description, image_path, display_order, is_box, box_category, box_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, price, category, description || '', image_path || '', maxOrder.max_order + 1, is_box ? 1 : 0, box_category || null, box_size || 6);
     
     const newProduct = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
     
@@ -139,7 +142,7 @@ router.post('/', authenticateAdmin, (req, res) => {
 router.patch('/:id', authenticateAdmin, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, category, image_path, is_available, display_order } = req.body;
+    const { name, description, price, category, image_path, is_available, display_order, is_box, box_category, box_size } = req.body;
     
     // Build dynamic update query
     const updates: string[] = [];
@@ -176,6 +179,18 @@ router.patch('/:id', authenticateAdmin, (req, res) => {
       updates.push('display_order = ?');
       values.push(display_order);
     }
+    if (is_box !== undefined) {
+      updates.push('is_box = ?');
+      values.push(is_box ? 1 : 0);
+    }
+    if (box_category !== undefined) {
+      updates.push('box_category = ?');
+      values.push(box_category);
+    }
+    if (box_size !== undefined) {
+      updates.push('box_size = ?');
+      values.push(box_size);
+    }
     
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -207,10 +222,26 @@ router.delete('/:id', authenticateAdmin, (req, res) => {
   try {
     const { id } = req.params;
     
+    // Get the product's category before deleting
+    const product = db.prepare('SELECT category FROM products WHERE id = ?').get(id) as { category: string } | undefined;
+    
     const result = db.prepare('DELETE FROM products WHERE id = ?').run(id);
     
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    // Check if this was the last product in the category - if so, delete the category
+    if (product) {
+      const remainingProducts = db.prepare(
+        'SELECT COUNT(*) as count FROM products WHERE category = ?'
+      ).get(product.category) as { count: number };
+      
+      if (remainingProducts.count === 0) {
+        // Delete the empty category
+        db.prepare('DELETE FROM categories WHERE slug = ?').run(product.category);
+        console.log(`Deleted empty category: ${product.category}`);
+      }
     }
     
     res.json({ success: true, message: 'Product deleted' });

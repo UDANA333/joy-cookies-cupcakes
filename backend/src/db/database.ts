@@ -117,6 +117,28 @@ export function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Seasonal themes table (for limited-time promotions like Valentine, Halloween, etc.)
+    CREATE TABLE IF NOT EXISTS seasonal_themes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      category_slug TEXT NOT NULL,
+      primary_color TEXT DEFAULT '#FF6B9A',
+      secondary_color TEXT DEFAULT '#8B0A1A',
+      accent_color TEXT DEFAULT '#FFD700',
+      icon TEXT DEFAULT '🎉',
+      banner_text TEXT,
+      banner_subtext TEXT,
+      is_active INTEGER DEFAULT 0,
+      display_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (category_slug) REFERENCES categories(slug) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_seasonal_themes_active ON seasonal_themes(is_active);
+    CREATE INDEX IF NOT EXISTS idx_seasonal_themes_category ON seasonal_themes(category_slug);
+
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
     CREATE INDEX IF NOT EXISTS idx_products_available ON products(is_available);
 
@@ -318,6 +340,40 @@ function runMigrations() {
   } catch (e) {
     // Migration might have already been applied or no old timestamps exist
   }
+
+  // Add box-related columns to products table
+  const productsTableInfo = db.prepare("PRAGMA table_info(products)").all() as Array<{ name: string }>;
+  const productsColumnNames = productsTableInfo.map(col => col.name);
+
+  if (!productsColumnNames.includes('is_box')) {
+    try {
+      db.exec("ALTER TABLE products ADD COLUMN is_box INTEGER DEFAULT 0");
+      console.log('  ✓ Migration: Added is_box column to products');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  if (!productsColumnNames.includes('box_category')) {
+    try {
+      db.exec("ALTER TABLE products ADD COLUMN box_category TEXT");
+      console.log('  ✓ Migration: Added box_category column to products');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  if (!productsColumnNames.includes('box_size')) {
+    try {
+      db.exec("ALTER TABLE products ADD COLUMN box_size INTEGER DEFAULT 6");
+      console.log('  ✓ Migration: Added box_size column to products');
+    } catch (e) {
+      // Column might already exist
+    }
+  }
+
+  // Note: Boxes category is created dynamically when admin creates a box product
+  // It will be auto-deleted when the last box product is removed
 
   // Seed products if table is empty
   seedProducts();

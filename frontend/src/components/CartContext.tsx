@@ -4,6 +4,12 @@ const NOTIFICATION_DURATION = 3000;
 const CART_STORAGE_KEY = 'joy-cookies-cart';
 const ADD_DEBOUNCE_MS = 300;
 
+// Interface for items selected in a box
+export interface BoxItem {
+  id: string;
+  name: string;
+}
+
 export interface CartItem {
   id: string;
   name: string;
@@ -11,6 +17,12 @@ export interface CartItem {
   quantity: number;
   image: string;
   category: string;
+  // Box-specific fields
+  isBox?: boolean;
+  boxItems?: BoxItem[];  // List of selected items in the box
+  boxCategory?: string;  // Category of items in the box (cookies/cupcakes)
+  boxSize?: number;      // Number of items in the box
+  cartId?: string;       // Unique cart item ID (for boxes with different selections)
 }
 
 export interface CartNotification {
@@ -81,22 +93,35 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const addItem = useCallback((newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
-    console.log('[CartContext] addItem called', { id: newItem.id, name: newItem.name, timestamp: Date.now() });
+    // For box items, generate a unique cart ID based on selected items
+    const cartItemId = newItem.isBox && newItem.boxItems 
+      ? `${newItem.id}-${newItem.boxItems.map(bi => bi.id).sort().join('-')}`
+      : newItem.id;
+    
+    console.log('[CartContext] addItem called', { id: cartItemId, name: newItem.name, isBox: newItem.isBox, timestamp: Date.now() });
     
     // Debounce: prevent rapid duplicate adds of the same item
     const now = Date.now();
-    const lastAdd = lastAddTimeRef.current.get(newItem.id) || 0;
+    const lastAdd = lastAddTimeRef.current.get(cartItemId) || 0;
     if (now - lastAdd < ADD_DEBOUNCE_MS) {
-      console.log('[CartContext] DEBOUNCED - too soon after last add for', newItem.id);
+      console.log('[CartContext] DEBOUNCED - too soon after last add for', cartItemId);
       return; // Ignore rapid duplicate add
     }
-    lastAddTimeRef.current.set(newItem.id, now);
+    lastAddTimeRef.current.set(cartItemId, now);
     
-    console.log('[CartContext] Actually adding item to cart', newItem.id);
+    console.log('[CartContext] Actually adding item to cart', cartItemId);
     setItems((prev) => {
-      const existingIndex = prev.findIndex(
-        (item) => item.id === newItem.id
-      );
+      // For box items, match by the generated cart ID
+      const existingIndex = prev.findIndex((item) => {
+        if (newItem.isBox && newItem.boxItems) {
+          // For boxes, compare by the cart ID which includes selected items
+          const existingCartId = item.isBox && item.boxItems
+            ? `${item.id}-${item.boxItems.map(bi => bi.id).sort().join('-')}`
+            : item.id;
+          return existingCartId === cartItemId;
+        }
+        return item.id === newItem.id;
+      });
       
       if (existingIndex > -1) {
         // IMPORTANT: Create a NEW object to avoid mutation!
@@ -111,12 +136,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       }
       
       console.log('[CartContext] Added new item to cart');
-      return [...prev, { ...newItem, quantity: newItem.quantity || 1 }];
+      // Store with the cart ID for box items
+      const itemToAdd = newItem.isBox ? { ...newItem, cartId: cartItemId } : newItem;
+      return [...prev, { ...itemToAdd, quantity: newItem.quantity || 1 }];
     });
   }, []);
 
   const removeItem = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+    // id could be either a regular product id or a cartId for box items
+    setItems((prev) => prev.filter((item) => (item.cartId || item.id) !== id));
   };
 
   const updateQuantity = (id: string, quantity: number) => {
@@ -124,8 +152,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       removeItem(id);
       return;
     }
+    // id could be either a regular product id or a cartId for box items
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity } : item))
+      prev.map((item) => ((item.cartId || item.id) === id ? { ...item, quantity } : item))
     );
   };
 

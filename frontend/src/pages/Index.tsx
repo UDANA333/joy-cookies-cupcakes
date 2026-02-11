@@ -1,4 +1,4 @@
-import { useState, memo, useCallback, useMemo } from "react";
+import { useState, useEffect, memo, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -7,6 +7,8 @@ import FloatingShapes from "@/components/FloatingShapes";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/components/CartContext";
 import { useProducts } from "@/components/ProductContext";
+import { useSeasonalTheme } from "@/components/SeasonalThemeContext";
+import { fetchActiveSeasonalTheme, fetchSeasonalThemes, SeasonalTheme, Product as APIProduct } from "@/lib/api";
 import heroImage from "@/assets/hero-banner.webp";
 
 // Helper to format category slug to display name
@@ -19,13 +21,43 @@ const Index = memo(() => {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const { addItem, totalItems, showNotification } = useCart();
   const { products, getProductById } = useProducts();
+  const { bannerVisible } = useSeasonalTheme();
+  
+  // Seasonal theme state
+  const [seasonalTheme, setSeasonalTheme] = useState<SeasonalTheme | null>(null);
+  const [seasonalProducts, setSeasonalProducts] = useState<APIProduct[]>([]);
+  const [allSeasonalCategories, setAllSeasonalCategories] = useState<Set<string>>(new Set());
+  
+  // Fetch active seasonal theme AND all seasonal categories
+  useEffect(() => {
+    const loadSeasonalData = async () => {
+      try {
+        // Fetch all themes to know which categories are seasonal
+        const allThemes = await fetchSeasonalThemes();
+        const seasonalCats = new Set(allThemes.map(t => t.category_slug));
+        setAllSeasonalCategories(seasonalCats);
+        
+        // Fetch active theme
+        const data = await fetchActiveSeasonalTheme();
+        setSeasonalTheme(data.theme);
+        setSeasonalProducts(data.products);
+      } catch (error) {
+        console.error('Failed to fetch seasonal theme:', error);
+      }
+    };
+    loadSeasonalData();
+  }, []);
 
   // Dynamically get unique categories from products, sorted by product count (most first)
+  // Exclude ALL seasonal categories from regular menu - they only show via their seasonal section
   const categories = useMemo(() => {
     const uniqueCategories = [...new Set(products.map(p => p.category))];
     
+    // Filter out ALL seasonal categories (only show them when their theme is active)
+    const filteredCategories = uniqueCategories.filter(cat => !allSeasonalCategories.has(cat));
+    
     // Sort categories by number of products (descending - most options first)
-    const sortedCategories = uniqueCategories.sort((a, b) => {
+    const sortedCategories = filteredCategories.sort((a, b) => {
       const countA = products.filter(p => p.category === a).length;
       const countB = products.filter(p => p.category === b).length;
       return countB - countA; // Descending order
@@ -35,11 +67,18 @@ const Index = memo(() => {
       { id: "all", label: "All Treats" },
       ...sortedCategories.map(cat => ({ id: cat, label: formatCategoryName(cat) }))
     ];
-  }, [products]);
+  }, [products, allSeasonalCategories]);
+
+  // Filter out ALL seasonal products from regular display
+  // They only appear in the seasonal section when their theme is active
+  const regularProducts = useMemo(() => {
+    if (allSeasonalCategories.size === 0) return products;
+    return products.filter(p => !allSeasonalCategories.has(p.category));
+  }, [products, allSeasonalCategories]);
 
   const filteredProducts = activeCategory === "all" 
-    ? products 
-    : products.filter(p => p.category === activeCategory);
+    ? regularProducts 
+    : regularProducts.filter(p => p.category === activeCategory);
 
   const handleAddToCart = useCallback((id: string) => {
     console.log('[Index] handleAddToCart called', { id, timestamp: Date.now() });
@@ -63,7 +102,7 @@ const Index = memo(() => {
       <Navbar cartCount={totalItems} />
       
       {/* Hero Section - Optimized for all devices */}
-      <section className="relative min-h-[100svh] flex items-center justify-center overflow-hidden pt-16 md:pt-20">
+      <section className={`relative min-h-[100svh] flex items-center justify-center overflow-hidden ${bannerVisible ? 'pt-24 md:pt-28' : 'pt-16 md:pt-20'}`}>
         <FloatingShapes variant="hero" />
         
         {/* Hero Background Image - Lazy loaded */}
@@ -122,7 +161,9 @@ const Index = memo(() => {
                 size="xl" 
                 className="w-full sm:w-auto touch-manipulation"
                 onClick={() => {
-                  document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
+                  // Scroll to seasonal section if active, otherwise regular menu
+                  const targetId = seasonalTheme && seasonalProducts.length > 0 ? 'seasonal' : 'menu';
+                  document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
                 Start Ordering
@@ -135,8 +176,111 @@ const Index = memo(() => {
         </div>
       </section>
 
+      {/* Seasonal Section - Shows when a seasonal theme is active */}
+      {seasonalTheme && seasonalProducts.length > 0 && (
+        <section 
+          id="seasonal"
+          className="relative py-12 sm:py-16 overflow-hidden scroll-mt-20"
+          style={{
+            background: `linear-gradient(135deg, ${seasonalTheme.primary_color}15 0%, ${seasonalTheme.secondary_color}15 100%)`
+          }}
+        >
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            {/* Seasonal Banner */}
+            <motion.div
+              className="text-center mb-8 sm:mb-12"
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div 
+                className="inline-flex items-center gap-3 px-6 py-3 rounded-full mb-4"
+                style={{
+                  background: `linear-gradient(135deg, ${seasonalTheme.primary_color} 0%, ${seasonalTheme.secondary_color} 100%)`,
+                  boxShadow: `0 4px 20px ${seasonalTheme.primary_color}40`
+                }}
+              >
+                <span className="text-3xl">{seasonalTheme.icon}</span>
+                <span className="text-white font-bold text-lg">
+                  {seasonalTheme.banner_text || `${seasonalTheme.name} Specials`}
+                </span>
+                <span className="text-3xl">{seasonalTheme.icon}</span>
+              </div>
+              {seasonalTheme.banner_subtext && (
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  {seasonalTheme.banner_subtext}
+                </p>
+              )}
+              {/* Inline scroll hint */}
+              <button
+                onClick={() => document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' })}
+                className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-foreground transition-colors"
+              >
+                <span>Full menu below</span>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </motion.div>
+
+            {/* Seasonal Products Grid */}
+            <motion.div
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              {seasonalProducts.map((product, index) => {
+                // Find the mapped product from our products context for proper image handling
+                const mappedProduct = products.find(p => p.id === product.id) || {
+                  id: product.id,
+                  name: product.name,
+                  price: product.price,
+                  image: product.image_path.startsWith('uploads/') ? `/${product.image_path}` : '',
+                  category: product.category,
+                  description: product.description
+                };
+                
+                return (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.05, duration: 0.4 }}
+                    className="relative"
+                  >
+                    {/* Seasonal badge */}
+                    <div 
+                      className="absolute -top-2 -right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-lg"
+                      style={{ backgroundColor: seasonalTheme.accent_color }}
+                    >
+                      {seasonalTheme.icon}
+                    </div>
+                    <ProductCard
+                      {...mappedProduct}
+                      onAddToCart={handleAddToCart}
+                    />
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+          
+          {/* Decorative accent line */}
+          <div 
+            className="absolute bottom-0 left-0 right-0 h-1"
+            style={{ 
+              background: `linear-gradient(90deg, transparent, ${seasonalTheme.accent_color}, transparent)` 
+            }}
+          />
+        </section>
+      )}
+
       {/* Menu Section */}
-      <section id="menu" className="relative py-12 sm:py-16 md:py-20">
+      <section id="menu" className="relative py-12 sm:py-16 md:py-20 scroll-mt-20">
         <FloatingShapes variant="section" />
         
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -189,7 +333,7 @@ const Index = memo(() => {
             <div className="space-y-16">
               {/* Dynamic Category Sections */}
               {categories.filter(cat => cat.id !== "all").map((category) => {
-                const categoryProducts = products.filter(p => p.category === category.id);
+                const categoryProducts = regularProducts.filter(p => p.category === category.id);
                 if (categoryProducts.length === 0) return null;
                 
                 return (

@@ -5,6 +5,7 @@ import { Menu, X, ShoppingBag, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/components/CartContext";
+import { useSeasonalTheme } from "@/components/SeasonalThemeContext";
 
 interface NavbarProps {
   cartCount?: number;
@@ -14,6 +15,7 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const { notification, hideNotification } = useCart();
+  const { bannerVisible } = useSeasonalTheme();
 
   const toggleMenu = useCallback(() => setIsOpen(prev => !prev), []);
   const closeMenu = useCallback(() => setIsOpen(false), []);
@@ -28,7 +30,10 @@ const Navbar = memo(({ cartCount = 0 }: NavbarProps) => {
 
   return (
     <motion.nav
-      className="fixed top-0 left-0 right-0 z-50 glass border-b border-border/50"
+      className={cn(
+        "fixed left-0 right-0 z-50 glass border-b border-border/50",
+        bannerVisible ? "top-[40px]" : "top-0"
+      )}
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}

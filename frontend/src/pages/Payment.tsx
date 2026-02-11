@@ -96,6 +96,11 @@ const Payment = memo(() => {
           price: item.price,
           quantity: item.quantity,
           category: item.category,
+          // Include box item details for box products
+          ...(item.isBox && item.boxItems && {
+            isBox: true,
+            boxItems: item.boxItems,
+          }),
         })),
         total: totalPrice,
         depositAmount: depositAmount,

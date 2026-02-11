@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Minus, Plus, ArrowLeft, ShoppingBag, Cookie, ChevronUp } from "lucide-react";
+import { Minus, Plus, ArrowLeft, ShoppingBag, Cookie, ChevronUp, Package } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { useCart } from "@/components/CartContext";
+import { useCart, BoxItem } from "@/components/CartContext";
 import { useProducts, Product } from "@/components/ProductContext";
+import BoxBuilder from "@/components/BoxBuilder";
 import { cn } from "@/lib/utils";
 
 const ProductPage = memo(() => {
@@ -16,6 +17,7 @@ const ProductPage = memo(() => {
   const { getProductById, getRelatedProducts, getRandomProducts } = useProducts();
   const [regularQuantity, setRegularQuantity] = useState(1);
   const [showScrollHint, setShowScrollHint] = useState(false);
+  const [showBoxBuilder, setShowBoxBuilder] = useState(false);
   const relatedSectionRef = useRef<HTMLElement>(null);
 
   // Reset quantities when product ID changes
@@ -92,7 +94,31 @@ const ProductPage = memo(() => {
     setShowScrollHint(true);
   };
 
+  const handleAddBoxToCart = (boxItems: BoxItem[]) => {
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category,
+      quantity: 1,
+      isBox: true,
+      boxItems,
+      boxCategory: product.boxCategory,
+      boxSize: product.boxSize,
+    });
+    showNotification(
+      `Added ${product.name} with your custom selection to your order!`
+    );
+    setShowScrollHint(true);
+  };
+
   const handleBuyNow = () => {
+    if (product.isBox) {
+      // For box products, open the box builder and then navigate on completion
+      setShowBoxBuilder(true);
+      return;
+    }
     addItem({
       id: product.id,
       name: product.name,
@@ -100,6 +126,22 @@ const ProductPage = memo(() => {
       image: product.image,
       category: product.category,
       quantity: regularQuantity,
+    });
+    navigate("/checkout");
+  };
+
+  const handleBoxBuyNow = (boxItems: BoxItem[]) => {
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category,
+      quantity: 1,
+      isBox: true,
+      boxItems,
+      boxCategory: product.boxCategory,
+      boxSize: product.boxSize,
     });
     navigate("/checkout");
   };
@@ -177,57 +219,95 @@ const ProductPage = memo(() => {
               {product.description}
             </p>
 
-            {/* Quantity Selector */}
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center justify-between bg-card rounded-xl p-3 sm:p-4 shadow-soft transition-all">
-                <div className="flex items-center gap-2">
-                  <Cookie className="w-4 h-4 sm:w-5 sm:h-5 transition-colors text-caramel" />
-                  <span className="text-foreground text-sm sm:text-base font-medium font-body">Quantity</span>
+            {/* Box Product UI */}
+            {product.isBox ? (
+              <div className="space-y-4">
+                {/* Box Info */}
+                <div className="bg-gradient-to-r from-caramel/10 to-chocolate/10 rounded-xl p-4 sm:p-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Package className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">Build Your Own Box</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Choose {product.boxSize || 6} {product.boxCategory === 'cupcakes' ? 'cupcakes' : 'cookies'} for your box
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Select from our delicious {product.boxCategory} to create your perfect assortment!
+                  </p>
                 </div>
-                <div className="flex items-center bg-secondary rounded-xl overflow-hidden">
-                  <motion.button
-                    className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
-                    onClick={() => setRegularQuantity(Math.max(1, regularQuantity - 1))}
-                    whileTap={{ scale: 0.85 }}
-                    aria-label="Decrease quantity"
+
+                {/* Build Box Button */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <Button
+                    variant="hero"
+                    size="xl"
+                    className="flex-1 touch-manipulation gap-2"
+                    onClick={() => setShowBoxBuilder(true)}
                   >
-                    <Minus className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </motion.button>
-                  <span className="w-10 sm:w-12 text-center text-lg sm:text-xl font-semibold text-foreground">
-                    {regularQuantity}
-                  </span>
-                  <motion.button
-                    className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
-                    onClick={() => setRegularQuantity(regularQuantity + 1)}
-                    whileTap={{ scale: 0.85 }}
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </motion.button>
+                    <Package className="w-4 h-4 sm:w-5 sm:h-5" />
+                    Build Your Box
+                  </Button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Regular Quantity Selector */}
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex items-center justify-between bg-card rounded-xl p-3 sm:p-4 shadow-soft transition-all">
+                    <div className="flex items-center gap-2">
+                      <Cookie className="w-4 h-4 sm:w-5 sm:h-5 transition-colors text-caramel" />
+                      <span className="text-foreground text-sm sm:text-base font-medium font-body">Quantity</span>
+                    </div>
+                    <div className="flex items-center bg-secondary rounded-xl overflow-hidden">
+                      <motion.button
+                        className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
+                        onClick={() => setRegularQuantity(Math.max(1, regularQuantity - 1))}
+                        whileTap={{ scale: 0.85 }}
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </motion.button>
+                      <span className="w-10 sm:w-12 text-center text-lg sm:text-xl font-semibold text-foreground">
+                        {regularQuantity}
+                      </span>
+                      <motion.button
+                        className="p-2 sm:p-3 text-chocolate-light hover:text-chocolate transition-colors touch-manipulation"
+                        onClick={() => setRegularQuantity(regularQuantity + 1)}
+                        whileTap={{ scale: 0.85 }}
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-3 sm:pt-4">
-              <Button
-                variant="hero"
-                size="xl"
-                className="flex-1 touch-manipulation"
-                onClick={handleAddToCart}
-              >
-                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                Add to Cart
-              </Button>
-              <Button
-                variant="outline"
-                size="xl"
-                className="flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground touch-manipulation"
-                onClick={handleBuyNow}
-              >
-                Buy Now
-              </Button>
-            </div>
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-3 sm:pt-4">
+                  <Button
+                    variant="hero"
+                    size="xl"
+                    className="flex-1 touch-manipulation"
+                    onClick={handleAddToCart}
+                  >
+                    <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                    Add to Cart
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="xl"
+                    className="flex-1 border-primary text-primary hover:bg-primary hover:text-primary-foreground touch-manipulation"
+                    onClick={handleBuyNow}
+                  >
+                    Buy Now
+                  </Button>
+                </div>
+              </>
+            )}
           </motion.div>
         </div>
 
@@ -323,6 +403,16 @@ const ProductPage = memo(() => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Box Builder Dialog */}
+      {product.isBox && (
+        <BoxBuilder
+          isOpen={showBoxBuilder}
+          onClose={() => setShowBoxBuilder(false)}
+          boxProduct={product}
+          onAddToCart={handleAddBoxToCart}
+        />
+      )}
 
       <Footer />
     </div>
